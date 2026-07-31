@@ -23,7 +23,7 @@
 ## 🚀 3 行代码 · 3 分钟见效
 
 ```bash
-pip install lao
+pip install lao-human-calibration
 ```
 
 ```python
@@ -47,7 +47,7 @@ result = ai.predict("member_0421")                  # ③ 预测下个行为
 > 🔧 **发布形态说明：** `LAOAgent` 是开箱即用的门面——`watch` 一句自然语言进去，行为自动存入模型；`predict` 给履约概率 + 建议。**关键：这个履约概率是 7 年实体门店运营萃取的 BMC 行为模式教出来的**——不是猜的，是有行为数据的。`state()` 额外暴露流失风险/续费概率。底层 `IntentionDecayModel` 接口也同时导出（见文档）。
 
 **3 分钟你能验证：**
-1. `pip install lao` —— 秒装，零外部依赖
+1. `pip install lao-human-calibration` —— 秒装，零外部依赖
 2. `watch("用户下周会来训练")` → `state()` 里能看到意图被记住 → `follow_through_prob` 给你履约判断
 3. 你的记忆保持率直接看得到 —— 不是"应该记得"，是**实测记得**
 
