@@ -6,20 +6,6 @@
 ![license](https://img.shields.io/badge/license-Apache%202.0-blue)
 ![py](https://img.shields.io/badge/python-3.9%2B-blue)
 
-## ⚠️ 安装说明（发布状态）
-
-> **PyPI 正式发布进行中。** 当前 Python 包名已定为 `lao-human-calibration`（PyPI 上的 `lao` 被另一项目占用，勿用 `pip install lao-human-calibration` 以免装错）。
->
-> **正式发版前建议用 Git URL 安装：**
-> ```bash
-> pip install git+https://github.com/ZWISERFIT/lao.git
-> # 或正式版发布后用：
-> pip install lao-human-calibration
-> ```
-> import 仍为 `from lao import LAOAgent`（包名与导入名解耦）。
-
-
-
 ---
 
 ## ✨ 装前 vs 装后（30 秒看懂价值）
@@ -38,6 +24,8 @@
 
 ```bash
 pip install lao-human-calibration
+
+> ⚖️ 安装包名以创始人 PyPI 终裁为准，当前指向建议名 `lao-human-calibration`。若终裁不同，此命令将同步更新。
 ```
 
 ```python
