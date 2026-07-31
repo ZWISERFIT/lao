@@ -24,8 +24,6 @@
 
 ```bash
 pip install lao-human-calibration
-
-> ⚖️ 安装包名以创始人 PyPI 终裁为准，当前指向建议名 `lao-human-calibration`。若终裁不同，此命令将同步更新。
 ```
 
 ```python
@@ -93,9 +91,9 @@ result = ai.predict("member_0421")                  # ③ 预测下个行为
 
 ## 🧭 下一步
 
-- [**Star the repo**](https://github.com/ZWISERFIT/zwiserfit-ai-store-manager) — 让更多人发现它
-- [**Try the demo**](https://github.com/ZWISERFIT/zwiserfit-ai-store-manager#demo) — 3 分钟自己跑一遍
-- [**Open an Issue**](https://github.com/ZWISERFIT/zwiserfit-ai-store-manager/issues) — 反馈问题，我们承诺闭环修复
+- [**Star the repo**](https://github.com/ZWISERFIT/lao) — 让更多人发现它
+- [**Try the demo**](https://github.com/ZWISERFIT/lao#demo) — 3 分钟自己跑一遍
+- [**Open an Issue**](https://github.com/ZWISERFIT/lao/issues) — 反馈问题，我们承诺闭环修复
 - 想知道「为什么 Agent 会忘事」？看 [Technical Manifesto](https://github.com/ZWISERFIT/ZWISERFIT/discussions/5)
 
 ---
