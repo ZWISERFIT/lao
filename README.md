@@ -92,9 +92,16 @@ result = ai.predict("member_0421")                  # ③ 预测下个行为
 ## 🧭 下一步
 
 - [**Star the repo**](https://github.com/ZWISERFIT/lao) — 让更多人发现它
-- [**Try the demo**](https://github.com/ZWISERFIT/lao#demo) — 3 分钟自己跑一遍
-- [**Open an Issue**](https://github.com/ZWISERFIT/lao/issues) — 反馈问题，我们承诺闭环修复
+- [**3 分钟自己跑一遍**](https://github.com/ZWISERFIT/lao#3-行代码--3-分钟见效) — 上面的 3 行代码就是 demo
+- [**Open an Issue**](https://github.com/ZWISERFIT/lao/issues) — 反馈问题，我们承诺透明回复、闭环修复
 - 想知道「为什么 Agent 会忘事」？看 [Technical Manifesto](https://github.com/ZWISERFIT/ZWISERFIT/discussions/5)
+
+## 🤝 贡献与信任
+
+LAO 是开源的，也需要你来让它更好。**信任不是营销出来的——是透明的、可验证的。** GitHub Issues 是公开的——每一条 bug、每一次修复、每一次交流，都是信任构建的证据。
+
+- 想贡献代码 / 文档？看 [CONTRIBUTING.md](./CONTRIBUTING.md)（有 `good first issue` 引导）
+- 每个外部贡献者都会被记进 [TRUST-BUILDERS.md](./TRUST-BUILDERS.md)——你的名字会被记住
 
 ---
 
