@@ -1,0 +1,39 @@
+---
+name: 🎯 Trust Event 报告
+about: 你的 Agent 被 LAO 抓到了「不对劲的那一刻」——分享它，成为第一个 Trust Builder
+title: "Trust Event: [一句话描述你的 Agent 当时做了什么]"
+labels: ["trust-event", "good first issue"]
+---
+
+> **当前诚实状态：0 个外部 Trust Event。** 我们刚开源，正在等这第一个真实记录——如果你的 Agent 被 LAO 拦下了什么，你就是 [TRUST-BUILDERS](TRUST-BUILDERS.md) 荣誉墙的第一行。
+
+## 用户 / 团队
+- 你用的 Agent / 框架：`(例如 LangChain / CrewAI / 自定义 ...)`
+- 生产环境 or 实验环境：`(生产 / 实验)`
+
+## 发生了什么（Trust Event 时刻）
+**你的 Agent 当时试图做什么？（尽量用原始输出）**
+```text
+(粘贴 Agent 的输入/输出，或约束违反时的快照)
+```
+
+**LAO 怎么拦下的 / 你发现了什么不对劲？**
+```
+(例如：Agent 编造了一个数字 → LAO Evidence Attribution 标为 [E]/[R]；或 intent 校验拦下了乱选的工具；或 context 膨胀被 Memory Compression 剪枝)
+```
+
+## 这为什么重要（一句话）
+**如果没有这层信任校验，后果可能是？** `(例如：上线了错误配置 / 推了编造数据 / token 成本暴涨)`
+
+## 复现（可选，贡献者最有价值的部分）
+- 能不能给一个最小复现？`(代码/步骤，能就填，不能就不填)`
+- 用的 LAO 版本：`langchain_community ... / lao-human-calibration==0.1.0 ...`
+
+## 你愿意贡献吗（Builder 入口）
+- [ ] 我已 wrap 真实 Agent（非 demo）
+- [ ] 我愿后续补充脱敏数据到 Behavior Data Pool
+- [ ] 我只是先记录这个 Trust Event（也欢迎）
+
+---
+
+*填完即成为候选 **Trust Builder**：你的名字会按 TRUST-BUILDERS.md 承诺出现在荣誉墙。*
