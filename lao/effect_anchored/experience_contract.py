@@ -94,11 +94,24 @@ class ExperienceContract:
 
 
 class ExperienceContractRegistry:
-    """经验契约注册表：按 owner 管理契约，提供共享判定。"""
+    """经验契约注册表：按 owner 管理契约，提供共享判定 + L3 确权存证。"""
 
-    def __init__(self, store_path: Optional[str] = None):
+    def __init__(self, store_path: Optional[str] = None,
+                 consent_gate: Optional[Any] = None):
         self._contracts: Dict[str, ExperienceContract] = {}  # 按 owner+domain 键
         self._path = store_path
+        # P0-2: Consent Gate（确权时授权检查·非安装时）
+        if consent_gate is not None:
+            self._consent_gate = consent_gate
+        else:
+            from lao.effect_anchored.consent_gate import ConsentGate
+            consent_path = None
+            if self._path:
+                consent_path = os.path.join(
+                    os.path.dirname(self._path) or ".",
+                    os.path.splitext(os.path.basename(self._path))[0] + "_consent.json",
+                )
+            self._consent_gate = ConsentGate(store_path=consent_path)
         if store_path:
             self._load()
 
@@ -131,6 +144,7 @@ class ExperienceContractRegistry:
         """对经验合约做 Ethan 存证，返回存证 ID 或 None。
 
         - 取 owner+domain 的契约；无契约返回 None
+        - **先经 Consent Gate 授权检查（P0-2）：未授权返回 None（确权时触发，非安装时）**
         - 对契约 to_dict() 计算 sha256
         - POST 到 Ethan /attest（P0-① 新增接口）
         - 返回 attestation_id；Ethan 不可达/失败返回 None
@@ -138,6 +152,9 @@ class ExperienceContractRegistry:
         contract = self.get_for_owner_domain(owner, domain)
         if contract is None:
             return None
+        # P0-2: Consent Gate 授权检查（确权时·非安装时）
+        if not self._consent_gate.is_granted(owner, domain):
+            return None  # 未授权不确权（安全：需用户先授权共享哈希元数据）
         payload = contract.to_dict()
         content_hash = hashlib.sha256(
             _json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()

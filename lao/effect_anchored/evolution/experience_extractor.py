@@ -343,6 +343,84 @@ class ExperienceExtractor:
         return fp in self._registry["patterns"]
 
 
+    def auto_extract_anchors(
+        self,
+        feedback_counts: Optional[dict[str, int]] = None,
+        bmc_patterns: Optional[dict[str, int]] = None,
+        success_counts: Optional[dict[str, int]] = None,
+    ) -> list[Any]:
+        """按三类规则从运行时数据自动生成可复用经验锚点(经验工厂·LAO 2.7 P0-1)。
+
+        规则(对齐 Zeus 五步流水线):
+          1. Feedback Bus 同类错误 ≥2 次 → DecisionAnchor
+          2. BMC 重复 pattern  ≥3 次     → CognitiveAnchor
+          3. 正确行为重复       ≥3 次     → FactAnchor
+        """
+        from lao.effect_anchored.cognitive_anchor import Anchor, DecisionAnchor
+        anchors: list[Any] = []
+
+        # 规则1: 同类错误 ≥2 次 → Decision 锚点
+        if feedback_counts is None:
+            feedback_counts = {
+                p["fingerprint"]: p.get("times_extracted", 1)
+                for p in self._registry.get("patterns", {}).values()
+            }
+        for fingerprint, count in feedback_counts.items():
+            if count < 2:
+                continue
+            pattern = self._registry.get("patterns", {}).get(fingerprint, {})
+            anchors.append(DecisionAnchor(
+                anchor_id=f"decision-err-{fingerprint[:12]}",
+                anchor_type="decision",
+                value={
+                    "principle": f"当同类错误重复出现(count={count})时, 需先定位根因而非重复修复",
+                    "trigger_condition": pattern.get("error_signature", fingerprint),
+                    "action_rule": "对已识别错误应用根因修复, 并登记约束防复发",
+                    "category": pattern.get("category", "infrastructure"),
+                    "source": "feedback_bus",
+                    "times_extracted": count,
+                },
+                tags=["auto-extracted", "error", "decision"],
+                trust_weight=min(0.9, 0.5 + 0.1 * count),
+            ))
+
+        # 规则2: BMc 重复 pattern ≥3 次 → Cognitive 锚点
+        if bmc_patterns:
+            for signature, count in bmc_patterns.items():
+                if count < 3:
+                    continue
+                anchors.append(Anchor(
+                    anchor_id=f"cognitive-bmc-{signature[:12]}",
+                    anchor_type="cognitive",
+                    value={
+                        "principle": f"在稳定上下文中观察到重复pattern(signature)出现{count}次",
+                        "condition": signature,
+                        "recurring_count": count,
+                        "source": "bmc",
+                    },
+                    tags=["auto-extracted", "bmc", "cognitive"],
+                    trust_weight=min(0.7, 0.5 + 0.05 * count),
+                ))
+
+        # 规则3: 正确行为重复 ≥3 次 → Fact 锚点
+        if success_counts:
+            for description, count in success_counts.items():
+                if count < 3:
+                    continue
+                anchors.append(Anchor(
+                    anchor_id=f"fact-succ-{hashlib.md5(description.encode()).hexdigest()[:12]}",
+                    anchor_type="fact",
+                    value={
+                        "fact": f"已验证策略: {description}",
+                        "success_count": count,
+                        "source": "success_tracker",
+                    },
+                    tags=["auto-extracted", "fact"],
+                    trust_weight=min(0.9, 0.6 + 0.05 * count),
+                ))
+
+        return anchors
+
 # ── CLI Entry Point ─────────────────────────────────────────────────────────
 
 
