@@ -31,6 +31,9 @@ LAO 由两个互补层组成，合仓后是一个完整包：
 | **经验图** | `experience_graph.py` | similar_to / caused_by / derived_from 关系网络 |
 | **反馈总线** | `feedback_bus.py` | L3经验→L2锚点→L1路由 自动闭环回流（自动萃取复利） |
 | **经验契约** | `experience_contract.py` | 经验共享安全边界，防跨域污染 |
+| **经验检索** | `experience_matching.py` | `retrieve_verified_experience()` 带权限/契约过滤的已验证经验检索（Melody 接入点） |
+
+> **Same Agent, Different Human** — 同一 LAO Agent 面向不同 Human 时，检索到「已验证但差异化」的经验集。差异来自各自 Human 的契约锚点（Storage 层），LAO 检索保持真实验证，不做偏好推断（那是 Melody 的 Matching/Personal Adaptation 域）。运行 `python examples/same_agent_different_human.py` 查看演示。
 
 ---
 
