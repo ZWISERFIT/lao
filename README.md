@@ -1,15 +1,26 @@
-# LAO — Logically Anchored Ontology
+# LAO — The Trust Kernel for Agent Reliability
 
-**让 Agent 不再忘事、不再胡说，像人一样记住真实经验并自动复利。**
+> **Before AI becomes you, it must first prove it can be trusted.**
 
-LAO 是一个开源的人类校准层 + Agent 可靠性框架。它把 **创始人 7 年真实经营智慧** 编码为可验证的认知锚点，让开发者构建的 Agent ：
+LAO is the open-source **Trust Kernel** between LLM agents and execution — the layer that lets future Personal AI Operating Systems exist.
+
+Its five layers:
+
+| Layer | Name | Role |
+|:--|:--|:--|
+| L1 | Intelligence Routing | Model/provider routing with failover |
+| L2 | Cognitive Anchor Runtime | Fact→Decision→Cognitive reasoning anchors |
+| L3 | Verified Experience Protocol | Trust Event → Atom → Anchor → Future Protection |
+| L4 | Trust Event Ledger | Every failure logged, versioned, hardened |
+| L5 | Recovery Engine | Self-repair, permanently prevented repeats |
+
+**LAO keeps your agent from failing — silently or permanently:**
 - 🧠 **不再忘事** — Behavioral Memory Chain 记住身份/约束/偏好
 - 🤥 **不再胡说** — Intent Validation + Output Compliance 检测幻觉
 - 💸 **不再烧钱** — Key Anchor Engine 智能裁剪上下文噪声
 - 🔁 **自动复利** — 每次错误自动萃取为永久约束（Feedback Bus）
 
 ---
-
 ## 两层架构：用户演示层 + Agent 可靠性层
 
 LAO 由两个互补层组成，合仓后是一个完整包：
@@ -126,6 +137,11 @@ ZWISERFIT 9-Agent Collective 全栈跑在自己的 LAO 上——每个 Agent 的
 ## Contributing
 
 遵循 [CONTRIBUTING.md](CONTRIBUTING.md)，欢迎 PR。
+
+
+---
+
+> LAO ships with the founder's 7-year operational Cognitive Anchors — real decision patterns, not synthetic data.
 
 ## License
 
