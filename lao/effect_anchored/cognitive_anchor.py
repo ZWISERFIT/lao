@@ -105,8 +105,10 @@ class CognitiveAnchorStore:
         h = anchor.content_hash
         entry = self._anchors.get(anchor.anchor_id)
         if entry is None:
+            cur = anchor.to_dict()
+            cur.setdefault("version", 1)  # 新锚点版本=1
             self._anchors[anchor.anchor_id] = {
-                "current": anchor.to_dict(),
+                "current": cur,
                 "hash": h,
                 "history": [],  # 版本追溯: 旧值列表
                 "updated": datetime.now(timezone.utc).isoformat(),
@@ -114,12 +116,38 @@ class CognitiveAnchorStore:
         else:
             # 保留旧版本到 history（不覆盖破坏）
             entry["history"].append(entry["current"])
-            entry["current"] = anchor.to_dict()
+            cur = anchor.to_dict()
+            # step2: 自动递增版本号
+            prev_v = int((entry["current"].get("version") or 1))
+            cur["version"] = prev_v + 1
+            entry["current"] = cur
             entry["hash"] = h
             entry["updated"] = datetime.now(timezone.utc).isoformat()
         if self._path:
             self._save()
         return h
+
+    def update_trigger_weight(self, anchor_id: str, delta: float) -> Optional[Dict[str, Any]]:
+        """step2: 每次修正触发时更新该锚点的 trigger 权重(阻尼收敛)。
+
+        - 更新 value.trigger_weight(若存在) 或 value.trigger_condition 命中度
+        - 触发修正(feedback) → 权重微调, 提升该锚点被优先选用概率
+        - 返回更新后的 current；锚点不存在返回 None
+        """
+        entry = self._anchors.get(anchor_id)
+        if entry is None:
+            return None
+        cur = entry["current"]
+        value = cur.get("value")
+        if isinstance(value, dict):
+            tw = float(value.get("trigger_weight", 0))
+            value["trigger_weight"] = round(tw + delta, 4)
+            value.setdefault("correction_count", 0)
+            value["correction_count"] += 1
+        cur["updated"] = datetime.now(timezone.utc).isoformat()
+        if self._path:
+            self._save()
+        return cur
 
     # -- 确定性读取 -------------------------------------------------------
 
