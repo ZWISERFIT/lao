@@ -1,0 +1,17 @@
+{
+  "patterns": {
+    "b735b620ec04096c": {
+      "pattern_id": "PAT-B735B620",
+      "fingerprint": "b735b620ec04096c",
+      "error_signature": "geo|深圳",
+      "category": "infrastructure",
+      "severity": "🔴",
+      "source_agent": "test",
+      "extracted_at": "2026-07-29T18:27:18.814621+00:00",
+      "times_extracted": 1
+    }
+  },
+  "version": "1.0",
+  "updated_at": "2026-07-29T18:27:18.814631+00:00",
+  "count": 1
+}

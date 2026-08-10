@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lao-human-calibration"
-version = "0.1.0"
-description = "The Human-Calibration Layer for Your Agents — 让 Agent 不再忘事、不再胡说，像人一样靠谱"
+version = "0.2.0-beta"
+description = "LAO — Logically Anchored Ontology. 让 Agent 不再忘事、不再胡说，像人一样记住真实经验并自动复利。BMC行为预测 + 五引擎 Agent 可靠性层。"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
-authors = [{ name = "ZWISERFIT" }]
-keywords = ["llm", "agent", "markov-chain", "intention-decay", "memory", "hallucination", "human-calibration"]
+authors = [{ name = "ZWISERFIT 9-Agent Collective" }]
+keywords = ["llm", "agent", "markov-chain", "intention-decay", "memory", "hallucination", "human-calibration", "reliability", "ontology", "cognitive-anchor"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -24,18 +24,36 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "jsonschema>=4.0",
+]
+cli = [
+    "pyyaml>=6.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/ZWISERFIT/lao"
 Repository = "https://github.com/ZWISERFIT/lao"
 Documentation = "https://github.com/ZWISERFIT/lao#readme"
 Issues = "https://github.com/ZWISERFIT/lao/issues"
+Discussions = "https://github.com/ZWISERFIT/ZWISERFIT/discussions"
+
+[project.scripts]
+lao = "lao.cli:main"
 
 [tool.setuptools]
 packages = [
     "lao",
     "lao.core",
     "lao.evolution",
+    "lao.effect_anchored",
+    "lao.effect_anchored.routing",
+    "lao.effect_anchored.evolution",
+    "lao.effect_anchored.interaction",
 ]
+include-package-data = true
 
 [tool.setuptools.package-data]
-lao = ["py.typed"]
+"lao" = ["py.typed", "*.html", "*.json"]

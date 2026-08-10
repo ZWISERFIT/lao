@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LAO Agent Reliability Dashboard</title>
+<style>
+  :root{--bg:#0b1120;--card:#151d33;--card2:#1c2742;--fg:#e2e8f0;--muted:#8fa3c0;
+        --mem:#38bdf8;--comp:#34d399;--cost:#fbbf24;--rec:#a78bfa;--ok:#34d399;--warn:#fbbf24;--bad:#f87171;
+        --red:#ff0000;--navy:#002B5C;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--fg);font-family:-apple-system,'Segoe UI',Roboto,sans-serif;padding:24px}
+  .wrap{max-width:960px;margin:0 auto}
+  header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+  h1{font-size:20px;font-weight:800;letter-spacing:.5px}
+  h1 .lao{color:var(--red)} h1 .b{color:var(--navy)}
+  .ts{color:var(--muted);font-size:12px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid #243049;border-radius:12px;padding:16px}
+  .kpi .lbl{color:var(--muted);font-size:12px;margin-bottom:6px}
+  .kpi .val{font-size:26px;font-weight:800}
+  .score-row{display:flex;align-items:center;gap:10px;margin:10px 0}
+  .score-row .name{width:110px;color:var(--muted);font-size:13px}
+  .bar{flex:1;height:10px;background:#0d1526;border-radius:6px;overflow:hidden}
+  .bar > div{height:100%;border-radius:6px}
+  .score-row .num{width:56px;text-align:right;font-weight:800;font-size:15px}
+  h2{font-size:15px;margin:20px 0 10px;color:var(--navy)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #243049}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+  .pill.ok{background:rgba(52,211,153,.15);color:var(--ok)}
+  .pill.warn{background:rgba(251,191,36,.15);color:var(--warn)}
+  .pill.bad{background:rgba(248,113,113,.15);color:var(--bad)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1><span class="lao">LAO</span> <span class="b">Agent Reliability Dashboard</span></h1>
+  <div class="ts" id="ts"></div>
+</header>
+
+<!-- KPI row -->
+<div class="grid">
+  <div class="card kpi"><div class="lbl">Trust Events (Today)</div><div class="val" id="kpi-events">--</div></div>
+  <div class="card kpi"><div class="lbl">Verified Events</div><div class="val" id="kpi-verified">--</div></div>
+  <div class="card kpi"><div class="lbl">Anchors Locked</div><div class="val" id="kpi-anchors">--</div></div>
+  <div class="card kpi"><div class="lbl">Avg Reliability</div><div class="val" id="kpi-avg">--</div></div>
+</div>
+
+<h2>Agent Reliability Score（四维）</h2>
+<div id="agents"></div>
+
+<h2>Today's Trust Events</h2>
+<div id="events"></div>
+
+<h2>Fixed（已硬化锚点 → 永久免疫）</h2>
+<div id="fixed"></div>
+
+</div>
+<script>
+const tsEl=document.getElementById('ts');
+tsEl.textContent=new Date().toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'});
+
+// ---------- inject point: __LAO_DATA__ ----------
+const DATA = __LAO_DATA__ || {agents:[],events:[],fixed:[],kpis:{}};
+
+// KPI
+document.getElementById('kpi-events').textContent = DATA.kpis?.events ?? 0;
+document.getElementById('kpi-verified').textContent = DATA.kpis?.verified ?? 0;
+document.getElementById('kpi-anchors').textContent = DATA.kpis?.anchors ?? 0;
+document.getElementById('kpi-avg').textContent = (DATA.kpis?.avg??0).toFixed?.(1) ?? DATA.kpis?.avg;
+
+// Agents
+const aw=document.getElementById('agents');
+const dims=[
+  {k:'memory',label:'Memory',c:'var(--mem)'},
+  {k:'compliance',label:'Compliance',c:'var(--comp)'},
+  {k:'cost',label:'Cost',c:'var(--cost)'},
+  {k:'recovery',label:'Recovery',c:'var(--rec)'},
+];
+(DATA.agents||[]).forEach(a=>{
+  const row=document.createElement('div');row.className='score-row';
+  row.innerHTML=`<span class="name">${a.agent}<span style="color:var(--muted);font-size:11px">·${a.overall}</span></span>`;
+  dims.forEach(d=>{
+    const v=a[d.k]??0;
+    const b=document.createElement('div');b.className='bar';
+    b.innerHTML=`<div style="width:${v}%;background:${d.c}"></div>`;
+    row.appendChild(b);
+    const n=document.createElement('div');n.className='num';n.textContent=Math.round(v);n.style.color=d.c;
+    row.appendChild(n);
+  });
+  aw.appendChild(row);
+});
+
+// Events
+const ew=document.getElementById('events');
+if((DATA.events||[]).length===0){ew.innerHTML='<div class="card" style="color:var(--muted)">No trust events yet — run <code>lao trust-event</code></div>';}
+else{
+  let t='<table><tr><th>ID</th><th>Type</th><th>Description</th><th>Status</th></tr>';
+  (DATA.events||[]).forEach(e=>{
+    const pill=e.type==='success'?'ok':(e.status==='CLOSED'?'ok':'warn');
+    t+=`<tr><td>${e.event_id}</td><td><span class="pill ${pill}">${e.type}</span></td><td>${e.failure?.slice?.(0,60)||''}</td><td>${e.status||''}</td></tr>`;
+  });
+  ew.innerHTML=t+'</table>';
+}
+
+// Fixed
+const fw=document.getElementById('fixed');
+if((DATA.fixed||[]).length===0){fw.innerHTML='<div class="card" style="color:var(--muted)">No anchors yet</div>';}
+else{
+  fw.innerHTML=(DATA.fixed||[]).map(a=>`<div class="card" style="margin-bottom:8px;padding:10px"><span class="pill ok">ANCHOR</span> ${a}</div>`).join('');
+}
+</script>
+</body>
+</html>
