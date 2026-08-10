@@ -29,6 +29,16 @@ Experience Contract — LAO 2.7 P0-②
 from dataclasses import dataclass, asdict, field
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
+import hashlib
+import json as _json
+import os
+import urllib.request
+import urllib.error
+
+# Ethan Attestation API 地址（P0-①，可经环境变量覆盖）
+ETHAN_ATTEST_URL = os.environ.get(
+    "ETHAN_ATTEST_URL", "http://localhost:17800/attest"
+)
 
 
 @dataclass
@@ -114,6 +124,44 @@ class ExperienceContractRegistry:
     def list_by_owner(self, owner: str) -> List[Dict[str, Any]]:
         """列出某 owner 的所有契约。"""
         return [c.to_dict() for k, c in self._contracts.items() if c.owner == owner]
+
+    # -- L3 确权存证 (P0-②) ------------------------------------------------
+
+    def attest_experience(self, owner: str, domain: str) -> Optional[str]:
+        """对经验合约做 Ethan 存证，返回存证 ID 或 None。
+
+        - 取 owner+domain 的契约；无契约返回 None
+        - 对契约 to_dict() 计算 sha256
+        - POST 到 Ethan /attest（P0-① 新增接口）
+        - 返回 attestation_id；Ethan 不可达/失败返回 None
+        """
+        contract = self.get_for_owner_domain(owner, domain)
+        if contract is None:
+            return None
+        payload = contract.to_dict()
+        content_hash = hashlib.sha256(
+            _json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
+        ).hexdigest()
+        body = _json.dumps({
+            "content_hash": f"sha256:{content_hash}",
+            "content_type": "experience_contract",
+            "owner": owner,
+            "metadata": payload,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            ETHAN_ATTEST_URL,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status != 200:
+                    return None
+                data = _json.loads(resp.read().decode("utf-8"))
+                return data.get("attestation_id")
+        except (urllib.error.URLError, OSError, _json.JSONDecodeError):
+            return None
 
     # -- 持久化 -------------------------------------------------------------
 
