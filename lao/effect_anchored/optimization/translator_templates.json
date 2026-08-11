@@ -1,0 +1,41 @@
+{
+  "version": "3.1.0",
+  "six_anomaly_templates": {
+    "cache_hit_low": {
+      "condition": "cache_hit < 30% AND cache_calls >= 10",
+      "human_title": "你的Agent重复处理了{cache_calls}次相同任务",
+      "human_body": "同样的任务Agent做了{cache_calls}次·每次都重新推理。就像是有人让你做{cache_calls}遍同一件事·每次都从头开始。",
+      "cta": "开启缓存·以后相同任务秒完成"
+    },
+    "latency_high": {
+      "condition": "avg_latency > 2000ms AND calls >= 5",
+      "human_title": "你的模型响应慢了{avg_latency_ms}ms",
+      "human_body": "最近{total_calls}次调用平均响应{avg_latency_ms}ms。同样的任务其他模型{candidate_model}更快。",
+      "cta": "切换到更快的{candidate_model}"
+    },
+    "error_403_429": {
+      "condition": "403/429 errors >= 3 in 24h",
+      "human_title": "上游限流了{error_count}次·不是你的问题",
+      "human_body": "你的模型在最近24小时被上游限流了{error_count}次。这是平台高峰期拥堵造成的·和你的使用无关。",
+      "cta": "临时切换到{candidate_model}·原模型恢复后自动切回"
+    },
+    "token_spike": {
+      "condition": "token消耗环比 > 120%",
+      "human_title": "你的Agent比上月多花了{spike_pct}%时间重复思考",
+      "human_body": "本月token消耗比上月多了{spike_pct}%。主要是{top_extra_task}这几个任务重复次数上涨。",
+      "cta": "开启锚点缓存·精简上下文·省掉重复推理"
+    },
+    "duplicate_task": {
+      "condition": "同任务类型重复 >= 5次 in 7天",
+      "human_title": "同样的任务Agent做了{dup_count}次·可以启用缓存",
+      "human_body": "你过去7天有{dup_count}次相同类型的任务每次都重新推理。缓存后只做1次就能复用。",
+      "cta": "对'{task_type}'任务启用缓存"
+    },
+    "expensive_on_light": {
+      "condition": "heavy_model on light_task >= 10次 in 7天",
+      "human_title": "你的简单任务用了高配模型·性价比低",
+      "human_body": "过去7天有{affected_count}次简单任务用了你的高配模型处理。切换到{candidate_model}能省成本。",
+      "cta": "简单任务自动切到{candidate_model}·复杂的保留高配模型"
+    }
+  }
+}

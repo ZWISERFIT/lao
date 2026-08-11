@@ -253,3 +253,110 @@ class FourStageConsent:
             os.makedirs(os.path.dirname(self._path), exist_ok=True)
         with open(self._path, "w") as f:
             json.dump(self._records, f, ensure_ascii=False, indent=2)
+
+
+# ── LAO v3.1 P0-9 · ⑤多模型授权 (model_switch) ───────────────────────────────
+
+MODEL_SWITCH_STAGE = "model_switch"
+
+# 拒绝后多少天再次询问(尊重用户意愿, 不强制)
+MODEL_SWITCH_REASK_DAYS = 7
+
+
+class ModelSwitchConsent:
+    """⑤多模型切换授权(P0-9)。
+
+    两步触发:
+      A. 检测到 ≥2 个模型 → 询问"有多个模型·授权自动选最优?"
+      B. 当前模型不稳定(403/超时/幻觉) → 询问"建议临时切·要换吗?"
+
+    拒绝 → 每 7 天再问一次(尊重用户意愿, 不强制切换)。
+    """
+
+    def __init__(self, store_path: Optional[str] = None):
+        self._records: Dict[str, Dict[str, Any]] = {}   # key -> {granted, last_asked_at, refusals}
+        self._path = store_path
+        if store_path:
+            self._load()
+
+    def _key(self, owner: str, domain: str) -> str:
+        return f"{owner}:{domain}"
+
+    def prompt_a(self, owner: str, domain: str, model_count: int) -> Dict[str, Any]:
+        """触发 A(≥2模型): 返回是否该问 + 话术。"""
+        rec = self._records.get(self._key(owner, domain), {})
+        if rec.get("granted"):
+            return {"should_ask": False, "asking": False, "reason": "已授权"}
+        if rec.get("granted") is False and self._should_reask(rec):
+            return {"should_ask": True, "asking": True,
+                    "title": f"检测到你有 {model_count} 个模型可选, 要不要让Agent自动选最优的?",
+                    "sub": "Agent会自动对比成本/速度/质量, 选出当前任务最优模型。你随时可以改回。",
+                    "options": ["授权自动选", "不用了·保持现状"]}
+        # 初始(从未问过)
+        return {"should_ask": True, "asking": True,
+                "title": f"检测到你有 {model_count} 个模型可选, 授权Agent自动选最优?",
+                "sub": "Agent会自动对比成本/速度/质量, 选出当前任务最优模型。",
+                "options": ["授权自动选", "不用了·保持现状"]}
+
+    def prompt_b(self, owner: str, domain: str, issue: str) -> Dict[str, Any]:
+        """触发 B(模型不稳定): 建议临时切。"""
+        return {"should_ask": True, "asking": True,
+                "title": f"当前模型遇到问题({issue}·非你的使用导致)",
+                "sub": "建议临时切换到更稳定的模型, 原模型恢复后自动切回。要换吗?",
+                "options": ["临时切换", "先不换"]}
+
+    def grant(self, owner: str, domain: str) -> None:
+        """用户接受自动选优。"""
+        from datetime import datetime as _dt, timezone as _tz
+        self._records[self._key(owner, domain)] = {
+            "granted": True, "granted_at": _dt.now(_tz.utc).isoformat(), "refusals": 0,
+        }
+        if self._path:
+            self._save()
+
+    def refuse(self, owner: str, domain: str) -> None:
+        """用户拒绝: 记录拒绝时间, 7天后再问。"""
+        from datetime import datetime as _dt, timezone as _tz
+        k = self._key(owner, domain)
+        rec = self._records.get(k, {})
+        rec["granted"] = False
+        rec["last_asked_at"] = _dt.now(_tz.utc).isoformat()
+        rec["refusals"] = int(rec.get("refusals", 0)) + 1
+        self._records[k] = rec
+        if self._path:
+            self._save()
+
+    def is_granted(self, owner: str, domain: str) -> bool:
+        return bool(self._records.get(self._key(owner, domain), {}).get("granted"))
+
+    def _should_reask(self, rec: Dict[str, Any]) -> bool:
+        """是否到了再次询问时间(距今超7天)。"""
+        from datetime import datetime as _dt, timezone as _tz
+        last = rec.get("last_asked_at")
+        if not last:
+            return True
+        try:
+            lt = _dt.fromisoformat(last)
+            if lt.tzinfo is None:
+                lt = lt.replace(tzinfo=_tz.utc)
+            return (_dt.now(_tz.utc) - lt).total_seconds() / 86400.0 >= MODEL_SWITCH_REASK_DAYS
+        except (ValueError, TypeError):
+            return True
+
+    # -- 持久化 -------------------------------------------------------------
+
+    def _load(self) -> None:
+        if self._path and os.path.exists(self._path):
+            try:
+                with open(self._path) as f:
+                    self._records = json.load(f)
+            except (json.JSONDecodeError, OSError, TypeError):
+                self._records = {}
+
+    def _save(self) -> None:
+        if not self._path:
+            return
+        if os.path.dirname(self._path):
+            os.makedirs(os.path.dirname(self._path), exist_ok=True)
+        with open(self._path, "w") as f:
+            json.dump(self._records, f, ensure_ascii=False, indent=2)

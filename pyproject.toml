@@ -55,6 +55,7 @@ packages = [
     "lao.effect_anchored.ethan",
     "lao.effect_anchored.melody",
     "lao.effect_anchored.validation",
+    "lao.effect_anchored.optimization",
 ]
 include-package-data = true
 
