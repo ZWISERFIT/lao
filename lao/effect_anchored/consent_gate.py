@@ -236,6 +236,32 @@ class FourStageConsent:
         rec = self._records.get(self._key(owner, domain), {})
         return {s["id"]: bool(rec.get(s["id"])) for s in FOUR_STAGES}
 
+    def require(self, stage: str, owner: str, domain: str,
+                auto_prompt: bool = False) -> Dict[str, bool]:
+        """集成接线门(P1-4): 在某动作前检查指定 stage 是否已授权。
+
+        未授权 → 返回 blocked=True(调用方应停止该动作, 不静默执行)。
+
+        Args:
+            stage: 授权阶段("cost"/"cleanse"/"upload"/"trade")
+            auto_prompt: True 时若未授权, 自动写入 granted=False 占位并提示
+                默认 False: 不自动写, 只返回 blocked 由上层处理。
+        """
+        stage_id = stage
+        granted = self.is_stage_granted(stage_id, owner, domain)
+        if granted:
+            return {"granted": True, "blocked": False, "stage": stage_id}
+        # 未授权: 阻塞动作(安全·不静默执行)
+        if auto_prompt:
+            # 记录未授权状态(不覆盖已有 Granted)
+            k = self._key(owner, domain)
+            rec = self._records.setdefault(k, {})
+            if stage_id not in rec or not rec[stage_id]:
+                rec[stage_id] = False
+                self._save()
+        return {"granted": False, "blocked": True, "stage": stage_id,
+                "action": f"须先获得[{stage_id}]阶段授权"}
+
     # -- 持久化 -------------------------------------------------------------
 
     def _load(self) -> None:
