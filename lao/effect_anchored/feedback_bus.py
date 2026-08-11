@@ -114,18 +114,54 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
         self._events: List[FeedbackEvent] = []
         self._listeners: Dict[str, List[Callable]] = {}
         self._route_constraints: List[Dict[str, Any]] = []
+        # LAO v3.1 P0-18: 内嵌三层认知系统(CognitiveSystem)
+        from lao.effect_anchored.cognitive_engine import CognitiveSystem
+        self.cognitive = CognitiveSystem()
 
     # -- 事件入总线 ---------------------------------------------------------
 
     def emit(self, event: FeedbackEvent) -> None:
-        """事件入总线 + 触发对应监听器。"""
+        """事件入总线 + 触发对应监听器 + 自动分发到三层认知系统(P0-18)。
+
+        分发规则:
+          "error"    → L1.on_error + L2.ingest
+          "conflict" → L1.on_conflict(冲突修正: 403/超时→避让)
+          "pattern"  → L1.on_success(经验复利: +0.3) + L2.ingest
+          "decision" → L3.judge
+        """
         self._events.append(event)
+        self._dispatch_cognitive(event)
         for key in (event.event_type, "*"):
             for fn in self._listeners.get(key, []):
                 try:
                     fn(event)
                 except Exception:
                     pass
+
+    def _dispatch_cognitive(self, event: FeedbackEvent) -> None:
+        """按事件类型自动分发到三层认知系统。"""
+        et = event.event_type
+        payload = event.payload or {}
+        sig = str(payload.get("error_signature") or payload.get("signature")
+                  or payload.get("provider", "") or "")
+        anchor_id = str(payload.get("anchor_id") or payload.get("id") or "")
+        if et == "error":
+            self.cognitive.L1.on_error(sig or "unknown", str(payload.get("detail") or ""))
+            self.cognitive.L2.ingest({"event": "error", "signature": sig})
+        elif et == "conflict" or et == "conflict_resolution":
+            self.cognitive.L1.on_conflict(
+                sig or "unknown", provider=str(payload.get("provider", "")),
+                model=str(payload.get("model", "")))
+        elif et == "pattern" or et == "success":
+            if anchor_id:
+                self.cognitive.L1.on_success(anchor_id)   # 经验复利 +0.3
+            self.cognitive.L2.ingest({"event": "pattern", **payload})
+        elif et == "decision":
+            self.cognitive.L3.judge(str(payload.get("context") or sig or ""))
+
+    def retrieve(self, query: str) -> Dict[str, Any]:
+        """走三层认知系统综合检索排列(P0-17)。"""
+        return self.cognitive.retrieve(query)
 
     def subscribe(self, event_type: str, fn: Callable) -> None:
         """订阅某一类事件（如 'error' 自动萃取）。"""
