@@ -283,19 +283,41 @@ class ModelSwitchConsent:
         return f"{owner}:{domain}"
 
     def prompt_a(self, owner: str, domain: str, model_count: int) -> Dict[str, Any]:
-        """触发 A(≥2模型): 返回是否该问 + 话术。"""
-        rec = self._records.get(self._key(owner, domain), {})
-        if rec.get("granted"):
-            return {"should_ask": False, "asking": False, "reason": "已授权"}
-        if rec.get("granted") is False and self._should_reask(rec):
+        """触发 A(≥2模型): 返回是否该问 + 话术。
+
+        四种状态(🔴 修复 2026-08-11 创始人批准·尊重用户意愿):
+          - 已授权(granted=True)              → 不问
+          - 已拒绝·未满7天(granted=False)      → 不问(尊重·防re-ask bug)
+          - 已拒绝·满7天(granted=False)        → 重新问(re-ask)
+          - 从未记录(初始)                     → 问
+
+        🔴 修复: refuse()后 granted=False, 原代码用 `rec.get("granted") is False`
+        判断进入拒绝分支。但若因持久化异常(JSON null→None)或并发导致 granted 键缺失,
+        会落兜底分支"初始从未问过"→无条件 asking=True, 违反用户拒绝意愿。
+        修复: 反转判断逻辑, 先判断是否明确已授权, 其余(包括 refused/unknown)
+        一律走"已拒绝"路径, 仅当 truly 从未记录(key 不存在于 _records)时才问。
+        """
+        k = self._key(owner, domain)
+        # truly 从未记录: 问
+        if k not in self._records:
             return {"should_ask": True, "asking": True,
-                    "title": f"检测到你有 {model_count} 个模型可选, 要不要让Agent自动选最优的?",
-                    "sub": "Agent会自动对比成本/速度/质量, 选出当前任务最优模型。你随时可以改回。",
+                    "title": f"检测到你有 {model_count} 个模型可选, 授权Agent自动选最优?",
+                    "sub": "Agent会自动对比成本/速度/质量, 选出当前任务最优模型。",
                     "options": ["授权自动选", "不用了·保持现状"]}
-        # 初始(从未问过)
+
+        rec = self._records[k]
+        # 已授权: 不问
+        if rec.get("granted") is True:
+            return {"should_ask": False, "asking": False, "reason": "已授权"}
+
+        # 剩下的都是"非明确授权"状态(包括 granted=False / granted缺失/None): 视为已拒绝
+        if not self._should_reask(rec):
+            return {"should_ask": False, "asking": False,
+                    "reason": "拒绝后未满7天·尊重意愿"}
+        # 满7天 → 重新问
         return {"should_ask": True, "asking": True,
-                "title": f"检测到你有 {model_count} 个模型可选, 授权Agent自动选最优?",
-                "sub": "Agent会自动对比成本/速度/质量, 选出当前任务最优模型。",
+                "title": f"检测到你有 {model_count} 个模型可选, 要不要让Agent自动选最优的?",
+                "sub": "Agent会自动对比成本/速度/质量, 选出当前任务最优模型。你随时可以改回。",
                 "options": ["授权自动选", "不用了·保持现状"]}
 
     def prompt_b(self, owner: str, domain: str, issue: str) -> Dict[str, Any]:
@@ -330,18 +352,26 @@ class ModelSwitchConsent:
         return bool(self._records.get(self._key(owner, domain), {}).get("granted"))
 
     def _should_reask(self, rec: Dict[str, Any]) -> bool:
-        """是否到了再次询问时间(距今超7天)。"""
+        """是否到了再次询问时间(距今超7天)。
+
+        🔴 修复: 原代码 last_asked_at 缺失/空字符串时返回 True(=该问),
+        导致 corrupt record 无 last_asked_at → 误判"该问"→ 违反拒绝意愿。
+        修复: last_asked_at 不可用时默认为"刚拒绝"(False), 等真的有足够时间才问。
+        宁可多等几天, 不违反用户拒绝意愿。
+        """
         from datetime import datetime as _dt, timezone as _tz
         last = rec.get("last_asked_at")
         if not last:
-            return True
+            # last_asked_at 缺失 → 保守假设刚拒绝(不re-ask)
+            return False
         try:
             lt = _dt.fromisoformat(last)
             if lt.tzinfo is None:
                 lt = lt.replace(tzinfo=_tz.utc)
             return (_dt.now(_tz.utc) - lt).total_seconds() / 86400.0 >= MODEL_SWITCH_REASK_DAYS
         except (ValueError, TypeError):
-            return True
+            # 解析失败 → 保守假设刚拒绝(不re-ask)
+            return False
 
     # -- 持久化 -------------------------------------------------------------
 
