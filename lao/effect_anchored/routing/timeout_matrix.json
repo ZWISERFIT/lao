@@ -1,0 +1,17 @@
+{
+  "version": "3.1.0",
+  "description": "per-mode 超时矩阵: soft=慢标记(下次优先避开) / hard=立即fallback",
+  "modes": {
+    "code_generation": { "hard_timeout_ms": 60000, "soft_timeout_ms": 3000 },
+    "code_review":     { "hard_timeout_ms": 30000, "soft_timeout_ms": 3000 },
+    "translation":     { "hard_timeout_ms": 10000, "soft_timeout_ms": 500 },
+    "summarization":   { "hard_timeout_ms": 20000, "soft_timeout_ms": 1500 },
+    "reasoning":       { "hard_timeout_ms": 45000, "soft_timeout_ms": 5000 },
+    "classification":  { "hard_timeout_ms": 5000,  "soft_timeout_ms": 300 },
+    "qa":              { "hard_timeout_ms": 15000, "soft_timeout_ms": 1000 },
+    "heartbeat":       { "hard_timeout_ms": 3000,  "soft_timeout_ms": 200 },
+    "fallback":        { "hard_timeout_ms": 10000, "soft_timeout_ms": 2000 },
+    "retrieval":       { "hard_timeout_ms": 8000,  "soft_timeout_ms": 1000 },
+    "embedding":       { "hard_timeout_ms": 5000,  "soft_timeout_ms": 800 }
+  }
+}

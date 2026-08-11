@@ -42,7 +42,65 @@ class FeedbackEvent:
         return asdict(self)
 
 
-class FeedbackBus:
+def error_fingerprint(provider: str, model: str, error_type: str) -> str:
+    """生成错误指纹(sha256 前12位)。"""
+    import hashlib
+    raw = f"{provider}|{model}|{error_type}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+
+
+class ErrorImmunity:
+    """错误免疫(跨 provider 共享)。"""
+
+    def __init__(self, store: Optional[dict] = None):
+        self._immune: Dict[str, str] = store or {}
+
+    def mark_immune(self, fingerprint: str, error_type: str = "") -> None:
+        self._immune[fingerprint] = error_type or "unknown"
+
+    def is_immune(self, fingerprint: str) -> bool:
+        return fingerprint in self._immune
+
+    def shared_immunity(self, error_type: str) -> List[str]:
+        return [fp for fp, et in self._immune.items() if et == error_type]
+
+    def to_dict(self) -> Dict[str, str]:
+        return dict(self._immune)
+
+
+class _FeedbackBusImmunityMixin:
+    """给 FeedbackBus 挂载免疫能力(避免改动其 __init__)。"""
+
+    def _ensure_immunity(self) -> ErrorImmunity:
+        if not hasattr(self, "_immunity"):
+            self._immunity = ErrorImmunity()
+        return self._immunity
+
+    def mark_immune(self, provider: str, model: str, error_type: str) -> str:
+        """标记某错误的指纹为免疫。返回指纹。"""
+        fp = error_fingerprint(provider, model, error_type)
+        self._ensure_immunity().mark_immune(fp, error_type)
+        return fp
+
+    def is_immune(self, provider: str, model: str, error_type: str) -> bool:
+        """该 provider+model+错误类型是否已免疫(含跨 provider 共享免疫)。
+
+        同 error_type 已有任一免疫 → 其他 provider 的同类错误也视为免疫
+        (GLM403 免疫后 → deepseek/X 的 403 也自动免疫)。
+        """
+        imm = self._ensure_immunity()
+        fp = error_fingerprint(provider, model, error_type)
+        if imm.is_immune(fp):
+            return True
+        # 跨 provider 共享: 同 error_type 已有免疫 → 视为免疫
+        return len(imm.shared_immunity(error_type)) > 0
+
+    def shared_immunity(self, error_type: str) -> List[str]:
+        """同错误类型跨 provider 的已免疫指纹(GLM403→DS同类型也免疫)。"""
+        return self._ensure_immunity().shared_immunity(error_type)
+
+
+class FeedbackBus(_FeedbackBusImmunityMixin):
     """
     L1/L2/L3 双向反馈总线。
 
@@ -156,3 +214,4 @@ class FeedbackBus:
         return {"total_events": len(self._events),
                 "by_type": dict(c),
                 "route_constraints": len(self._route_constraints)}
+
