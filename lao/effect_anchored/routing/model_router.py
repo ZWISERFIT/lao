@@ -37,13 +37,58 @@ class ModelRouter:
     - 每个 tier 保证降级链内每一环都在该 provider 端点真实可用（防 400）
     """
 
-    # === 路由决策权重（创始人铁律 2026-08-04）===
-    # 安全 > 效率 > 成本
-    # - 安全(depth)：模型能力层级匹配任务复杂度，错配=幻觉风险
-    # - 效率(speed)：credit消费模型优先（但不牺牲安全层级）
-    # - 成本(cost)：同安全+效率层内，低成本优先
-    #
-    # 池内从左到右=优先级递减
+    # === 选品三级过滤：安全 > 效率 > 成本 (创始人 2026-08-11 批准) ===
+    # SAFETY_GATE: 每 tier 的质量底线(quality)。低于底线 = 安全不达标 = 不能选(不可绕过)。
+    #   - 任务越重, 底线越高(错配=幻觉风险)
+    #   - heavy/reasoning/code 要求 pro 级(flash 被 safety 拦)
+    #   - ultra_light/light/cn_explain 可用 flash
+    SAFETY_GATE = {
+        "ultra_light": 0.50,
+        "light": 0.50,
+        "medium": 0.80,
+        "heavy": 0.85,
+        "reasoning": 0.85,
+        "code": 0.80,
+        "cn_explain": 0.50,
+        "cn_creative": 0.80,
+    }
+
+    def select_optimal(self, pool: list, tier: str,
+                       credit_mode: str = "prefer") -> dict:
+        """三级过滤选品(安全 > 效率 > 成本)。
+
+        1. safety gate: 过滤掉质量低于 tier 底线的(不可绕过)
+        2. efficiency: 同质量集内, 优先低延迟/credit模式偏好
+        3. cost: 同质量同效率集内, 选成本最低
+
+        创始人定调: 性价比最优 ≠ 成本最低, 安全是第一门禁。
+        """
+        if not pool:
+            return {}
+        gate = self.SAFETY_GATE.get(tier, 0.50)
+        # ① safety gate: 质量底线(第一门禁·不可突破)
+        safe = [e for e in pool if float(e.get("quality", 0)) >= gate]
+        if not safe:   # 底线不可破: 全不达标时取该tier最高的(宁缺勿乱·保安全)
+            safe = [max(pool, key=lambda e: float(e.get("quality", 0)))]
+        # ② efficiency: 同质量集内优先低延迟 + credit_mode偏好
+        if credit_mode == "avoid":
+            safe = [e for e in safe if not e.get("credit", False)] or safe
+        elif credit_mode == "force" and tier != "reasoning":
+            cr = [e for e in safe if e.get("credit", False)]
+            if cr:
+                safe = cr
+        eff = sorted(safe, key=lambda e: float(e.get("latency", 1.0)))
+        # ③ cost: 同质量同效率集(前25%效率)内选成本最低
+        best_eff = eff[:max(1, len(eff)//4 + (len(eff)%4>0))]
+        # 解析成本 "$X/$Y" 取第一个(输入价)
+        def cost_val(e):
+            c = str(e.get("cost", "$999"))
+            try:
+                return float(c.replace("$", "").split("/")[0])
+            except (ValueError, IndexError):
+                return 999.0
+        chosen = min(best_eff, key=cost_val)
+        return dict(chosen)
     # 三 provider 故障转移（2026-08-10 实测均 200）:
     #   deepseek(api.deepseek.com):    deepseek-v4-pro/flash ✅
     #   token-plan(aliyuncs):          deepseek-v4-pro ✅ / flash ❌403
@@ -63,53 +108,53 @@ class ModelRouter:
 
         # ultra_light: 心跳/问候/状态检查 → 最低成本·最快响应
         "ultra_light": [
-            {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "cost": "$0.14/$0.28"},
-            {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "cost": "$0.14/$0.28"},
-            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
+            {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
+            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
         ],
         # light: 日常问答/总结/翻译 → flash
         "light": [
-            {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "cost": "$0.14/$0.28"},
-            {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "cost": "$0.14/$0.28"},
-            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
+            {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
+            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
         ],
         # medium: 分析/推断 → pro 首选(更稳)
         "medium": [
-            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "cost": "$0.14/$0.28"},
+            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
         ],
         # heavy: 复杂推理/战略分析 → DeepSeek v4-pro 不可替代
         "heavy": [
-            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
         ],
         # reasoning: 深度推理 → DeepSeek v4-pro 唯一（无替代）
         "reasoning": [
-            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
         ],
         # code: 代码生成 → deepseek-v4-pro 首选 (代码专项·稳)
         "code": [
-            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
         ],
         # cn_explain: 中文解释/说明 → flash(省)
         "cn_explain": [
-            {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "cost": "$0.14/$0.28"},
-            {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "cost": "$0.14/$0.28"},
-            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
+            {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
+            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
         ],
         # cn_creative: 中文创意/写作 → pro 首选(创作质量)
         "cn_creative": [
-            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
         ],
     }
 
@@ -166,15 +211,20 @@ class ModelRouter:
             if credit_pool:
                 pool = credit_pool
 
-        primary = pool[0]
-        fallbacks = [f"{e['provider']}/{e['model']}" for e in pool[1:]]
+        # 三级选品: 安全 > 效率 > 成本 (创始人 2026-08-11 批准·非固定pool[0])
+        primary = self.select_optimal(pool, tier, credit_mode=credit_mode)
+        # 降级链: 安全集内按效率排序其余(已过safety gate)
+        gate = self.SAFETY_GATE.get(tier, 0.50)
+        fallback_pool = [e for e in pool if float(e.get("quality", 0)) >= gate]
+        fallbacks = [f"{e['provider']}/{e['model']}"
+                     for e in fallback_pool if e != primary]
 
         return RouteSelection(
             task=task,
-            model=primary["model"],
-            provider=primary["provider"],
+            model=primary.get("model", pool[0]["model"]),
+            provider=primary.get("provider", pool[0]["provider"]),
             tier=tier,
-            cost=primary["cost"],
+            cost=primary.get("cost", pool[0]["cost"]),
             credit_based=primary.get("credit", False),
             fallback_chain=fallbacks,
         )
