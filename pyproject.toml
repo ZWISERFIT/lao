@@ -53,6 +53,8 @@ packages = [
     "lao.effect_anchored.evolution",
     "lao.effect_anchored.interaction",
     "lao.effect_anchored.ethan",
+    "lao.effect_anchored.melody",
+    "lao.effect_anchored.validation",
 ]
 include-package-data = true
 

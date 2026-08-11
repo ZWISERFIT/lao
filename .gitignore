@@ -8,3 +8,4 @@ dist/
 lao/evolution/registry/test-registry/
 lao/evolution/registry/constraints/C-*.json
 lao/evolution/registry/logs/*.jsonl
+lao/effect_anchored/weights.json
