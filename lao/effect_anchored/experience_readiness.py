@@ -79,8 +79,18 @@ class ExperienceReadinessTracker:
       })   # -> ReadinessResult.ready=True  → 推动第③授权
     """
 
-    def __init__(self, config: Optional[ReadinessConfig] = None):
+    def __init__(self, config: Optional[ReadinessConfig] = None,
+                 consent=None, consent_owner: str = "default"):
+        """初始化。
+
+        Args:
+            config: 达标判定配置。
+            consent: 可选四阶段授权门(P1-4 集成)。
+            consent_owner: 授权归属 owner。
+        """
         self.config = config or ReadinessConfig()
+        self._consent = consent
+        self._consent_owner = consent_owner
 
     def check_experience(self, meta: Dict[str, Any]) -> ReadinessResult:
         """评估单条经验是否达标。meta 需含 id/trigger_count/cross_domain/created_at/confidence。"""
@@ -116,5 +126,19 @@ class ExperienceReadinessTracker:
         return [self.check_experience(e) for e in experiences]
 
     def ready_batch(self, experiences: List[Dict[str, Any]]) -> List[ReadinessResult]:
-        """只返回 ready 的经验(量达标→推送③授权)。"""
+        """只返回 ready 的经验(量达标→推送③授权)。
+
+        Raises:
+            PermissionError: 未授权「③上传+④交易」时抛错(P1-4·Factory→③④)。
+        """
+        # P1-4 集成接线: Factory 生产 → ③上传+④交易授权
+        from lao.effect_anchored.consent_gate import FourStageConsent
+        from lao.effect_anchored.consent_integration import guard_factory
+        _consent = self._consent or FourStageConsent()
+        _ok, _why = guard_factory(_consent, self._consent_owner)
+        if not _ok and self._consent is None:
+            # 默认内部consent: upload/trade 非默认授权 → 需用户显式
+            raise PermissionError(f"[ready_batch] {_why}")
+        if not _ok:
+            raise PermissionError(f"[ready_batch] {_why}")
         return [r for r in self.evaluate_batch(experiences) if r.ready]

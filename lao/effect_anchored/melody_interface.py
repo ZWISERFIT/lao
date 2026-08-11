@@ -67,7 +67,20 @@ class MelodyBuilder:
         实现提示（由 Melody 提供）:
           - 输入 experience_ids → 取对应已验证经验 → 组合规则
           - 产出 AgentProfile（含 rules + attestation_refs）
+
+        Raises:
+            PermissionError: 未授权「④确权交易」时抛错(P1-4·Melody交易→④)。
         """
+        # P1-4 集成接线: Melody 交易 → ④确权交易授权
+        from lao.effect_anchored.consent_gate import FourStageConsent
+        from lao.effect_anchored.consent_integration import guard_trade
+        _consent = getattr(self, "_consent", None) or FourStageConsent()
+        _ok, _why = guard_trade(_consent, owner)
+        if not _ok and getattr(self, "_consent", None) is None:
+            # 默认内部consent: trade 非默认授权 → 需用户显式
+            raise PermissionError(f"[compose_agent_profile] {_why}")
+        if not _ok:
+            raise PermissionError(f"[compose_agent_profile] {_why}")
         raise NotImplementedError("Melody 域: 由 Melody 实现 compose_agent_profile")
 
     def validate_composition(self, profile: AgentProfile) -> List[str]:

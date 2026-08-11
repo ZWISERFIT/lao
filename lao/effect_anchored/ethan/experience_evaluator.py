@@ -31,6 +31,16 @@ class ExperienceEvaluator:
     evaluate(rule, domain, trust_weight, ...) → {dimensions, overall, band, rarity}
     """
 
+    def __init__(self, consent=None, consent_owner: str = "default"):
+        """初始化。
+
+        Args:
+            consent: 可选四阶段授权门(P1-4 集成)。
+            consent_owner: 授权归属 owner。
+        """
+        self._consent = consent
+        self._consent_owner = consent_owner
+
     def evaluate(
         self,
         content_hash: str,
@@ -54,7 +64,21 @@ class ExperienceEvaluator:
         Returns:
             {dimensions, overall, band, rarity, reference_range, evaluation_id}
             或 None(Ethan 不可达/失败)
+
+        Raises:
+            PermissionError: 未授权「③经验上传」时抛错(P1-4·Ethan上传→③)。
         """
+        # P1-4 集成接线: Ethan 上传 → ③经验上传授权
+        from lao.effect_anchored.consent_gate import FourStageConsent
+        from lao.effect_anchored.consent_integration import guard_upload
+        _consent = self._consent or FourStageConsent()
+        _ok, _why = guard_upload(_consent, self._consent_owner)
+        if not _ok and self._consent is None:
+            # 默认内部consent: 上传非默认授权(default=False) → 需用户显式
+            raise PermissionError(f"[evaluate] {_why}")
+        if not _ok:
+            raise PermissionError(f"[evaluate] {_why}")
+
         body = json.dumps({
             "content_hash": content_hash,
             "content_type": content_type,

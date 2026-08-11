@@ -158,15 +158,19 @@ class ModelRouter:
         ],
     }
 
-    def __init__(self, task_classifier=None):
+    def __init__(self, task_classifier=None, consent=None, consent_owner="default"):
         """初始化路由器。
 
         Args:
             task_classifier: 可选的自定义分类器实例。
+            consent: 可选的四阶段授权门(P1-4 集成)。
+            consent_owner: 授权归属 owner。
         """
         from lao.effect_anchored.routing.task_classifier import TaskClassifier
 
         self.classifier = task_classifier or TaskClassifier()
+        self._consent = consent
+        self._consent_owner = consent_owner
 
     def route(
         self,
@@ -186,7 +190,27 @@ class ModelRouter:
 
         Returns:
             RouteSelection 包含所选模型、provider、层级、成本和降级链路。
+
+        Raises:
+            PermissionError: 未授权「①成本追踪」时抛错(P1-4 集成接线·Router→①)。
         """
+        # P1-4 集成接线: Router → ①成本授权
+        # cost/cleanse 为 default=True(默认同意):
+        #   - 默认内部consent → 首次自动授予不阻塞
+        #   - 显式注入consent → 尊重其授权状态(可拒则拒)
+        # upload/trade 为 default=False(需显式) → 必须显式授权才放行
+        from lao.effect_anchored.consent_gate import FourStageConsent
+        from lao.effect_anchored.consent_integration import guard_route
+        _consent = self._consent or FourStageConsent()
+        _owner = getattr(self, "_consent_owner", "default")
+        _ok, _why = guard_route(_consent, _owner)
+        if not _ok and self._consent is None and "成本追踪" in _why:
+            # 仅默认内部consent: 自动授予 default=True 的 cost(不阻塞默认工作流)
+            _consent.grant_stage("cost", _owner, "routing")
+            _ok = True
+        if not _ok:
+            raise PermissionError(f"[route] {_why}")
+
         tier = self.classifier.classify(task)
 
         # 代码生成类任务特殊处理
