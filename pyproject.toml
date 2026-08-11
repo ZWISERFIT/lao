@@ -52,6 +52,7 @@ packages = [
     "lao.effect_anchored.routing",
     "lao.effect_anchored.evolution",
     "lao.effect_anchored.interaction",
+    "lao.effect_anchored.ethan",
 ]
 include-package-data = true
 

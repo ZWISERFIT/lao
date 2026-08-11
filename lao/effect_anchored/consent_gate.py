@@ -153,3 +153,103 @@ class ConsentGate:
         with open(self._path, "w") as f:
             json.dump({k: r.to_dict() for k, r in self._records.items()},
                       f, ensure_ascii=False, indent=2)
+
+
+# ── LAO v3.1 · 四阶段授权机制 (P0-3) ──────────────────────────────────────────
+
+FOUR_STAGES = [
+    {
+        "id": "cost",
+        "label": "① 成本追踪(安装时·首次import)",
+        "data_to": "Nova 成本档案",
+        "default": True,      # 可拒·L1仍可用无优化
+    },
+    {
+        "id": "cleanse",
+        "label": "② 数据清洗(安装时·检测到旧数据)",
+        "data_to": "L2 本地格式化",
+        "default": True,      # 可拒·从零开始
+    },
+    {
+        "id": "upload",
+        "label": "③ 经验上传评估(每天·每条单独)",
+        "data_to": "Ethan 第1次收",
+        "default": False,     # 可拒·次日提醒
+    },
+    {
+        "id": "trade",
+        "label": "④ 确权交易(每次·Ethan返回后)",
+        "data_to": "Melody 市场",
+        "default": False,     # 可拒·本地保留
+    },
+]
+
+
+class FourStageConsent:
+    """四阶段授权门(LAO v3.1 P0-3)。
+
+    四个授权阶段, 每阶段独立时机/触发方/数据流向:
+      ① 成本追踪 → Nova (安装时)
+      ② 数据清洗 → L2  (安装时·检测旧数据)
+      ③ 经验上传 → Ethan (每天·每条单独)
+      ④ 确权交易 → Melody (Ethan返回后)
+
+    旧的 ConsentGate(单层 3-checkbox) 保留以向后兼容;
+    本类提供 v3.1 的四阶段细粒度授权。
+    """
+
+    def __init__(self, store_path: Optional[str] = None):
+        self._records: Dict[str, Dict[str, bool]] = {}   # f"{owner}:{domain}" -> {stage: bool}
+        self._path = store_path
+        if store_path:
+            self._load()
+
+    def _key(self, owner: str, domain: str) -> str:
+        return f"{owner}:{domain}"
+
+    def list_stages(self) -> List[Dict[str, Any]]:
+        """列出四阶段授权选项(UI 展示用)。"""
+        return list(FOUR_STAGES)
+
+    def grant_stage(self, stage: str, owner: str, domain: str) -> bool:
+        """单独授权某一阶段。返回是否合法(存在该 stage)。"""
+        if stage not in {s["id"] for s in FOUR_STAGES}:
+            return False
+        k = self._key(owner, domain)
+        self._records.setdefault(k, {})[stage] = True
+        if self._path:
+            self._save()
+        return True
+
+    def revoke_stage(self, stage: str, owner: str, domain: str) -> None:
+        k = self._key(owner, domain)
+        if k in self._records:
+            self._records[k].pop(stage, None)
+            if self._path:
+                self._save()
+
+    def is_stage_granted(self, stage: str, owner: str, domain: str) -> bool:
+        return bool(self._records.get(self._key(owner, domain), {}).get(stage))
+
+    def stage_status(self, owner: str, domain: str) -> Dict[str, bool]:
+        """查询某 owner+domain 四阶段授权状态。"""
+        rec = self._records.get(self._key(owner, domain), {})
+        return {s["id"]: bool(rec.get(s["id"])) for s in FOUR_STAGES}
+
+    # -- 持久化 -------------------------------------------------------------
+
+    def _load(self) -> None:
+        if self._path and os.path.exists(self._path):
+            try:
+                with open(self._path) as f:
+                    self._records = json.load(f)
+            except (json.JSONDecodeError, OSError, TypeError):
+                self._records = {}
+
+    def _save(self) -> None:
+        if not self._path:
+            return
+        if os.path.dirname(self._path):
+            os.makedirs(os.path.dirname(self._path), exist_ok=True)
+        with open(self._path, "w") as f:
+            json.dump(self._records, f, ensure_ascii=False, indent=2)
