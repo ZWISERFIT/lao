@@ -260,6 +260,42 @@ class ConstraintGenerator:
         
         return c
     
+    def from_cache_miss(
+        self,
+        context: str = "",
+        miss_tokens: int = 0,
+        level: ConstraintLevel = ConstraintLevel.YELLOW,
+    ) -> Constraint:
+        """从缓存失效教训生成约束 (T5·Stella成本优化)。
+
+        7.31 大上下文 flash 批量任务导致缓存整体失效 → miss 单日 1.87亿,
+        成本 ¥201(82%)。T5 目标: 让"大任务缓存失效"成为一个自动生成的约束,
+        下次同场景(大上下文批量/缓存不友好任务)触发预警拦截, 防复发。
+
+        Args:
+            context: 发生场景描述(batch/大上下文等)。
+            miss_tokens: 本次未命中 token 量(用于约束力度参考)。
+            level: 约束级别(默认为🟡建议)。
+
+        Returns:
+            生成的Constraint(domain=SYSTEM, rule含缓存失效教训)。
+        """
+        self.generated_count += 1
+        ts = int(datetime.now(timezone.utc).timestamp())
+        _miss_note = f" ({miss_tokens:,} tokens miss)" if miss_tokens else ""
+        c = Constraint(
+            id=f"C-CACHEMISS-{self.generated_count:03d}-{ts}",
+            domain=ConstraintDomain.SYSTEM,
+            level=level,
+            rule=(f"🛠 缓存感知(T5): 缓存失效教训 — 大上下文批量任务需评估缓存命中。"
+                  f"7.31教训: 整批失效致miss暴涨{_miss_note}。{context}"),
+            trigger_pattern="缓存|miss|大上下文|batch|批量|cache|未命中",
+            source_event="cache_miss_lesson::large_context",
+        )
+        if self.rule_registry:
+            self.rule_registry.register(c)
+        return c
+
     def _extract_keywords(self, text: str) -> str:
         """从文本中提取关键词作为trigger_pattern"""
         # 提取中文词（2-6个汉字）和英文词
