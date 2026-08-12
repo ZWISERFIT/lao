@@ -18,6 +18,9 @@ from typing import Any, Dict, List, Optional
 # Nova 成本接收 URL(可经环境变量覆盖; 默认走 Agent-Bus 事件文件回传)
 NOVA_SYNC_URL = os.environ.get("NOVA_SYNC_URL", "")
 
+# 成本预警(T4): 阈值($USD/日), 可环境变量覆盖
+COST_ALERT_THRESHOLD = float(os.environ.get("LAO_COST_ALERT_THRESHOLD", "3.0"))
+
 
 class CostTracker:
     """追踪并持久化模型调用成本, 支持匿名回传 Nova。"""
@@ -37,6 +40,7 @@ class CostTracker:
         tokens_out: int,
         cost_usd: float,
         latency_ms: float = 0.0,
+        provider: str = "",
     ) -> dict:
         """记录一次模型调用成本。
 
@@ -47,6 +51,7 @@ class CostTracker:
             tokens_out: 输出 token 数。
             cost_usd: 美元成本。
             latency_ms: 延迟毫秒(LAO v3.1 新增, 回传 Nova 用)。
+            provider: provider(deepseek/token-plan/novarouteai)。T3: 聚合键需含 provider。
 
         Returns:
             刚记录的条目 dict。
@@ -54,6 +59,7 @@ class CostTracker:
         entry = {
             "task": task,
             "model": model,
+            "provider": provider,
             "tokens_in": int(tokens_in),
             "tokens_out": int(tokens_out),
             "cost_usd": float(cost_usd),
@@ -67,6 +73,36 @@ class CostTracker:
     def total_cost(self) -> float:
         """返回所有记录的累计美元成本。"""
         return sum(r.get("cost_usd", 0) for r in self.records)
+
+    def daily_cost(self, day: str = "") -> float:
+        """返回某日累计成本($USD)。day 为空=今天。"""
+        if not day:
+            day = datetime.now().date().isoformat()
+        return sum(r.get("cost_usd", 0) for r in self.records
+                   if (r.get("timestamp") or "")[:10] == day)
+
+    def check_alert(self, threshold: Optional[float] = None) -> Dict[str, Any]:
+        """成本预警(T4): 今日成本超阈值→预警(返回告警详情, 不自行发送)。
+
+        Args:
+            threshold: 预警阈值($USD)。缺省用 COST_ALERT_THRESHOLD。
+
+        Returns:
+            {"alerted": bool, "day": ..., "cost": ..., "threshold": ...}
+            超阈值时 alerted=True 并含 body 描述(供 cron/Tristan 发送)。
+        """
+        _th = float(threshold) if threshold is not None else COST_ALERT_THRESHOLD
+        _day = datetime.now().date().isoformat()
+        _cost = self.daily_cost(_day)
+        _alerted = _cost >= _th
+        res = {"alerted": _alerted, "day": _day, "cost": round(_cost, 4), "threshold": _th}
+        if _alerted:
+            res["body"] = (
+                f"🔴 成本预警(T4): 今日 {_day} 成本 ${_cost:.2f} ≥ 阈值 ${_th:.2f}。"
+                f"请检查是否触发预算红线/缓存失效/任务激增。"
+                f"[记录 {len(self.records)} 条]"
+            )
+        return res
 
     # -- Nova 成本同步 (P0-4) -------------------------------------------------
 
@@ -82,12 +118,17 @@ class CostTracker:
         if not self.records:
             return {"ok": True, "synced": 0, "reason": "无待同步记录"}
 
-        # 聚合(按 model)
+        # 聚合(按 model × provider × 日 · T3规范)
         agg: Dict[str, dict] = {}
         for r in self.records:
-            m = r["model"]
-            a = agg.setdefault(m, {
+            _date = (r.get("timestamp") or "")[:10]  # 日维度
+            _k = (r["model"], r.get("provider", ""), _date)
+            m, prov, day = _k
+            key = f"{m}|{prov}|{day}"
+            a = agg.setdefault(key, {
                 "model": m,
+                "provider": prov,
+                "day": day,
                 "calls": 0, "tokens_in": 0, "tokens_out": 0,
                 "cost_usd": 0.0, "latency_ms_sum": 0.0,
             })
