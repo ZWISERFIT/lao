@@ -38,8 +38,7 @@ class ModelRouter:
     """
 
     # === 选品三级过滤：安全 > 效率 > 成本 (创始人 2026-08-11 批准) ===
-    # SAFETY_GATE: 每 tier 的质量底线(quality)。低于底线 = 安全不达标 = 不能选(不可绕过)。
-    #   - 任务越重, 底线越高(错配=幻觉风险)
+    # SAFETY_GATE: 每 tier 的质量底线(quality)。低于底线 = 安全不达标 = 不能选(不可绕过)。    #   - 任务越重, 底线越高(错配=幻觉风险)
     #   - heavy/reasoning/code 要求 pro 级(flash 被 safety 拦)
     #   - ultra_light/light/cn_explain 可用 flash
     SAFETY_GATE = {
@@ -158,19 +157,24 @@ class ModelRouter:
         ],
     }
 
-    def __init__(self, task_classifier=None, consent=None, consent_owner="default"):
+    def __init__(self, task_classifier=None, consent=None, consent_owner="default", model_pool=None):
         """初始化路由器。
 
         Args:
             task_classifier: 可选的自定义分类器实例。
             consent: 可选的四阶段授权门(P1-4 集成)。
             consent_owner: 授权归属 owner。
+            model_pool: 可选模型目录注入。
+                - 不传=使用本模块默认开放目录(泛化示例·Router Protocol 开源层)。
+                - ZWISERFIT-OS 私有部署传私有 pool(routing_policy.MODEL_POOL) →
+                  覆盖真实 provider 采购表(Router Intelligence·闭源)。
         """
         from lao.effect_anchored.routing.task_classifier import TaskClassifier
 
         self.classifier = task_classifier or TaskClassifier()
         self._consent = consent
         self._consent_owner = consent_owner
+        self.MODEL_POOL = model_pool if model_pool is not None else self.__class__.MODEL_POOL
 
     def route(
         self,
