@@ -62,8 +62,17 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-class Constraint(ABC):
-    """RetroOnto 约束基类 — 所有自动生成的约束继承此类"""
+class SelfHealingConstraint(ABC):
+    """RetroOnto 自愈约束基类(How·闭源执行引擎) — 所有自动生成的执行约束继承此类
+
+    ⚖️ 创始人三分语义(2026-08-13 终审):
+    - Constraint (What·声明式契约) → 开源 LAO Protocol
+    - SelfHealingConstraint (How·执行引擎) → 闭源 Implementation
+    - Policy (Why/When·私有策略) → 闭源 Private
+
+    本类 = How 层: check()/auto_fix() 自愈执行能力(闭源)。
+    fingerprint()/provenance 保持可验证(公开怎么证明)。
+    """
 
     constraint_id: str = "{constraint_id}"
     severity: str = "{severity}"
@@ -88,10 +97,10 @@ class Constraint(ABC):
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     def __repr__(self) -> str:
-        return f"Constraint({{self.constraint_id}}, {{self.severity}})"
+        return f"SelfHealingConstraint({{self.constraint_id}}, {{self.severity}})"
 
 
-class {class_name}(Constraint):
+class {class_name}(SelfHealingConstraint):
     """{description}"""
 
     def check(self) -> bool:
