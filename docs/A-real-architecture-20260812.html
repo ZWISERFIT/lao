@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LAO v3.2 真实架构 · A版（内部密档）</title>
+<style>
+:root{--navy:#002B5C;--red:#C00;--lock:#7a1f1f;--bg:#f7f8fa;--card:#fff;--line:#d8dde6;--sub:#5a6778;--green:#1a7f37;--warn:#b06a00;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.62;color:#1c2438;background:var(--bg);padding:30px;max-width:1050px;margin:0 auto}
+.conf{background:var(--lock);color:#fff;display:inline-block;padding:3px 10px;border-radius:4px;font-size:12px;letter-spacing:1px;margin-bottom:16px}
+h1{font-size:24px;color:var(--navy);border-bottom:3px solid var(--navy);padding-bottom:8px}
+h2{font-size:18px;color:var(--navy);margin:26px 0 10px;border-left:4px solid var(--red);padding-left:10px}
+h3{font-size:14.5px;color:var(--red);margin:14px 0 6px}
+p,li{font-size:13.5px}.sub{color:var(--sub);font-size:13px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:12px}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.8px}
+th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+th{background:var(--navy);color:#fff;font-weight:600}
+.lock{color:var(--lock);font-weight:700}
+.good{color:var(--green)}.warn{color:var(--warn)}
+code{background:#eef1f6;padding:1px 5px;border-radius:4px;font-size:12px}
+pre{background:#0e1626;color:#c8d3e0;padding:14px;border-radius:6px;overflow-x:auto;font-size:12px;line-height:1.55}
+.tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:10px;margin-right:4px}
+.t-open{background:#e4f4e8;color:var(--green)}.t-lock{background:#fdeaea;color:var(--lock)}
+.note{background:#f0f4fa;border-left:3px solid var(--navy);padding:10px 14px;border-radius:0 6px 6px 0;font-size:12.6px;margin:8px 0}
+.flow{font-size:13px;text-align:center;background:var(--card);border:1px solid var(--line);padding:16px;border-radius:8px;margin:10px 0}
+</style>
+</head>
+<body>
+<span class="conf">🔒 内部密档 · 含商业机密 · 勿外发</span>
+<h1>LAO v3.2 真实架构（A 版）</h1>
+<div class="sub">完整真实技术架构 · 创始人/可信第三方审阅基准 · 2026-08-12 · DRI: Tristan</div>
+
+<div class="note">本文档呈现 <b>当前磁盘真实 LAO</b>（不是对外演示版）。含全部 68 文件 / 12,409 行 + 🔒核心配方坐标。用于与第三方对齐真实技术能力，<b>严禁外传</b>。</div>
+
+<h2>〇、一页定位</h2>
+<div class="card">
+<p><b>LAO = 让 Agent「像人一样靠谱」的人性校准层（Trust Layer）。</b></p>
+<div class="flow">
+LAO v3.2 = <b>L1 路由决策</b> → <b>L2 经验工厂</b> → <b>L3 确权交易</b>
+</div>
+<p>Agent 装上 LAO：忘事→记事、胡说→可验证、失控→可约束、行为→可确权变现。</p>
+</div>
+
+<h2>一、代码规模（磁盘实证）</h2>
+<div class="card">
+<table>
+<tr><th>层</th><th>文件数</th><th>代码行</th><th>核心文件</th></tr>
+<tr><td><b>core/</b>（行为基因）</td><td>5</td><td>~800</td><td>human_nature_engine / behavior_tokenizer / behavioral_markov_chain / intention_decay / router_decision</td></tr>
+<tr><td><b>effect_anchored/ L1</b></td><td>7</td><td>1,351</td><td>model_router(331) / task_decomposer(378) / task_classifier(105) / cost_tracker / switch_audit / timeout_matrix / agent_reliability</td></tr>
+<tr><td><b>effect_anchored/ L2</b></td><td>12</td><td>2,960</td><td>cognitive_engine / cognitive_anchor / feedback_bus / memory_anchor + evolution/*(atom_engine, constraint_generator 514, experience_extractor 505, rule_registry 631)</td></tr>
+<tr><td><b>effect_anchored/ L3</b></td><td>7+</td><td>1,027</td><td>experience_contract/graph/matching/readiness + ethan/evaluator + attestation/protocol + melody/*</td></tr>
+<tr><td><b>支撑</b></td><td>—</td><td>—</td><td>consent_gate / consent_integration / preference_firewall / self_audit / hallucination_gate / data_cleanser / context_rebuilder / adaptive_constraint / interaction / optimization / validation / dashboard</td></tr>
+<tr><td><b>主入口</b></td><td>—</td><td>253</td><td>LAOAgent（六函数）</td></tr>
+</table>
+<p><b>总计：68 个 .py，12,409 行。</b></p>
+</div>
+
+<h2>二、L1 路由决策层（真机细节）</h2>
+<div class="card">
+<h3>model_router.py（331 行·核心）</h3>
+<p><b>三级选品算法（创始人 08-11 批准）：</b>安全(质量底线 SAFETY_GATE) → 效率(latency) → 成本(cost)。</p>
+<p><b>8 tier 分类：</b>ultra_light / light / medium / heavy / reasoning / code / cn_explain / cn_creative</p>
+<p><b>v3.2 已改（#2）：</b><code>model_pool</code> 注入，真实采购表抽离 OS 私有。</p>
+<p><b>真实采购（🔒当前在 OS 私有 routing_policy.py）：</b></p>
+<ul>
+<li class="lock">deepseek 直连（api.deepseek.com）· 唯一稳定</li>
+<li class="lock">novarouteai（聚合）· flash/pro 均可用</li>
+<li class="lock">token-plan（aliyuncs 套餐）· 仅 pro，flash 403</li>
+<li class="lock">价格：$0.14/$0.28（flash）· $2.20/$8.80（pro）</li>
+</ul>
+<div class="tag t-open">🟢公开</div> 选型算法 / RouterDecision 接口 / 评分维度 / 泛化目录
+<div class="tag t-lock">🔒私有</div> Provider 名 / 采购价格 / Routing Policy Engine
+</div>
+
+<h2>三、L2 经验工厂层（真机细节）</h2>
+<div class="card">
+<h3>cognitive_engine.py（三层认知系统）</h3>
+<table>
+<tr><th>层</th><th>权重(tier)</th><th>职责</th></tr>
+<tr><td><b>L1 实时迭代</b></td><td>0.40</td><td>冲突修正 + 错误复利 + 经验复利（毫秒级）</td></tr>
+<tr><td><b>L2 短期品味</b></td><td>0.35</td><td>修养 + 见识 + 情感（分钟/小时沉淀）</td></tr>
+<tr><td><b>L3 长期判断</b></td><td>0.25</td><td>世界观 + 价值观 + 人生观（长期不变）</td></tr>
+</table>
+<p><b>v3.2 已改（#4/5）：</b><code>CognitivePolicy</code> 可注入，真实权重抽离 OS。</p>
+<div class="note" style="border-color:var(--lock)">
+🔒 <b>核心配方-1（未公开·weights.json）：</b>认知检索权重 <code>trust=0.32 / freshness=0.18 / relevance=0.25 / rarity=0.15 / trigger=0.10</code>，文档明确标注"创始人认知系统核心·不开源"，<b>未进 GitHub</b>。
+</div>
+<div class="note" style="border-color:var(--lock)">
+🔒 <b>核心配方-2（未公开·C-BMC-001-*.json）：</b>BMC 行为模式约束（7年门店经验萃取），引擎代码开源、行为模式权重闭源。
+</div>
+</div>
+
+<h2>四、L3 确权交易层（真机细节）</h2>
+<div class="card">
+<h3>experience_* 四件套 + Ethan + attestation + melody</h3>
+<ul>
+<li><b>experience_contract</b>（202）— Ethan attestation API 地址可 env 覆盖</li>
+<li><b>experience_graph</b>（196）— 经验关系图</li>
+<li><b>experience_matching</b>（196）— 经验匹配（ExperienceHit）</li>
+<li><b>experience_readiness</b>（144）— 就绪度（ReadinessConfig）</li>
+<li><b>ethan/experience_evaluator</b>（111）— 本地 Ethan :17800 三维估值</li>
+<li><b>attestation/protocol</b>（85）— <b>v3.2 新建（#6/7）</b> ExperienceScore/Attest/Verify</li>
+<li><b>melody_interface</b>（93）— Melody 市场边界</li>
+</ul>
+<div class="tag t-open">🟢公开</div> ExperienceContract/Consent/Attestation/TrustEvent/Hash/Verification + ExperienceScore 结构
+<div class="tag t-lock">🔒私有</div> 评分配方 / 稀有度参考 / 商业估值 / 定价 / DID 实现 / 哈希水印 (归 OS)
+</div>
+
+<h2>五、🔒 核心配方坐标表（A 版核心·分层分级）</h2>
+<div class="card">
+<table>
+<tr><th>#</th><th>核心资产</th><th>位置</th><th>开源状态</th><th>风险等级</th></tr>
+<tr><td>1</td><td>认知检索权重（trust/freshness/...）</td><td>weights.json</td><td class="good">🟢 未公开</td><td class="lock">🔴 最高·必锁</td></tr>
+<tr><td>2</td><td>BMC 行为模式（7年门店经验）</td><td>C-BMC-001-*.json</td><td class="good">🟢 未公开</td><td class="lock">🔴 最高·必锁</td></tr>
+<tr><td>3</td><td>认知层权重（0.40/0.35/0.25）</td><td>cognitive_engine.py</td><td class="warn">🔴 已公开</td><td class="warn">🟠 收不回·已抽离</td></tr>
+<tr><td>4</td><td>路由采购表/价格（$2.20/$8.80）</td><td>model_router.py</td><td class="warn">🔴 已公开</td><td class="warn">🟠 收不回·v3.2抽离</td></tr>
+<tr><td>5</td><td>路由时延矩阵</td><td>timeout_matrix.json</td><td class="warn">🔴 已公开</td><td class="warn">🟠 低敏</td></tr>
+<tr><td>6</td><td>错误模式库</td><td>.pattern_registry.json</td><td class="warn">🔴 已公开</td><td class="good">🟢 低敏(基础设施)</td></tr>
+</table>
+</div>
+
+<h2>六、进化/自愈体系（支撑）</h2>
+<div class="card">
+<ul>
+<li><b>atom_engine</b> — TrustEvent→Atom→Anchor→Future Protection 自动沉淀</li>
+<li><b>constraint_generator</b>（514）— PATTERN_DEFS 约束生成 + Gate 集成</li>
+<li><b>experience_extractor</b>（505）— 经验抽取</li>
+<li><b>rule_registry</b>（631）— 规则注册表（含 C-BMC/C-MODEL-400 等 Gate 约束）</li>
+<li><b>self_audit</b>（297）— 自我审计（Stella 对齐）</li>
+<li><b>preference_firewall</b>（234）— 偏好防火墙</li>
+<li><b>consent_gate / consent_integration</b> — 四阶段授权门（provenance/consent/sharing/erasure + cost/cleansing/upload/trade）</li>
+</ul>
+</div>
+
+<h2>七、架构边界（IP 分层总纲）</h2>
+<div class="card">
+<table>
+<tr><th>层</th><th>🟢 开源（协议/接口）</th><th>🔒 ZWISERFIT 闭源（配方/策略）</th></tr>
+<tr><td><b>L1</b></td><td>路由机制/评分维度/审计/泛化目录</td><td>Provider采购/价格/选型策略</td></tr>
+<tr><td><b>L2</b></td><td>认知架构/锚schema/反馈协议</td><td>权重/配比/复利/经验价值函数</td></tr>
+<tr><td><b>L3</b></td><td>契约/同意/证明/验证</td><td>估值/定价/交易/DID/水印</td></tr>
+</table>
+<p><b>Nova/Ethan/Melody</b> 从"LAO 业务部门"抽象为 LAO↔OS 间<b>协议能力</b>（#3）。</p>
+</div>
+
+<h2>八、诚实披露（#11）</h2>
+<div class="card">
+<p class="warn"><b>已进 Apache 公开历史（不可收回）：</b>认知层权重 0.40/0.35/0.25、路由采购表/价格、时延矩阵。</p>
+<p><b>处理：</b>不作假收回，之上构建 Private Cognitive Policy 优化层。真正值钱的 <b>weights.json 认知权重 + BMC 行为模式仍在私有侧</b>——这是护城河的核心，必须锁死。</p>
+</div>
+
+<br>
+<div class="note" style="border-color:var(--lock);text-align:center"><b>🔒 A 版为内部密档。B 版（对外开源展示）另行生成，不会包含本表第二~五节机密内容。</b></div>
+
+</body>
+</html>

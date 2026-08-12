@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LAO v3.2 · 开源版（B 版 · 对外）</title>
+<style>
+:root{--navy:#002B5C;--red:#FF0000;--bg:#0b1220;--card:#141d33;--line:#223047;--txt:#e6ecf5;--sub:#8ea0b8;--accent:#5aa9ff;--green:#4ade80;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.7;color:var(--txt);background:var(--bg);padding:30px;max-width:1020px;margin:0 auto}
+.hero{text-align:center;padding:36px 20px;background:linear-gradient(135deg,#002B5C 0%,#0e3a66 60%,#123){0.0};border-radius:12px;margin-bottom:24px;border:1px solid var(--line)}
+.hero h1{font-size:30px;color:#fff;margin-bottom:8px;letter-spacing:1px}
+.hero p{color:var(--sub);font-size:15px}
+.hero .badge{display:inline-block;background:var(--red);color:#fff;font-size:12px;padding:4px 14px;border-radius:20px;margin-top:12px;letter-spacing:2px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;margin-right:4px}
+.t-open{background:#123a22;color:var(--green);border:1px solid #1f5c38}
+.t-verify{background:#122d4a;color:var(--accent);border:1px solid #254f7a}
+h2{font-size:20px;color:#fff;margin:30px 0 12px;border-bottom:2px solid var(--line);padding-bottom:8px}
+h3{font-size:15px;color:var(--accent);margin:14px 0 6px}
+p,li{font-size:14px}.sub{color:var(--sub)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin-bottom:14px}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:13px}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:#16203a;color:#fff}
+code{background:#0e1626;padding:1px 5px;border-radius:4px;font-size:12px;color:var(--accent)}
+pre{background:#0a101f;color:#9ab;padding:14px;border-radius:8px;overflow-x:auto;font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.pill{display:inline-block;background:#224;border:1px solid var(--line);padding:6px 12px;border-radius:8px;font-size:12px;margin:3px}
+.cta{background:linear-gradient(135deg,var(--red),#b0002e);text-align:center;padding:22px;border-radius:12px;margin:24px 0}
+.cta p{font-size:16px;color:#fff;font-weight:600}
+.big{color:#fff;font-size:16px;font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="hero">
+<h1>LAO · open</h1>
+<p>让 AI Agent 装上「人性」——可信、可验证、可确权。</p>
+<span class="badge">Apache 2.0 · OPEN SOURCE</span>
+</div>
+
+<div class="card" style="border-color:var(--accent)">
+<p class="big">🎯 一句话：</p>
+<p>LAO 是 Agent 的<b>人性校准层</b>——从"会忘事、会胡说、会失控"的裸模型，变成"记事、可信、可约束、经验能变现"的 Web5 原著民。</p>
+</div>
+
+<h2>为什么你需要 LAO</h2>
+<div class="grid">
+<div class="card"><b>🧠 记住该记住的</b><br><span class="sub">行为轨迹沉淀，Agent 不再"重启即失忆"。</span></div>
+<div class="card"><b>🔍 可信可验证</b><br><span class="sub">每个经验都有哈希确权+可验证证明，谁都能审计。</span></div>
+<div class="card"><b>🛡️ 行为可约束</b><br><span class="sub">规则即代码，越界即拦截，Agent 行为可信任。</span></div>
+<div class="card"><b>💎 经验能变现</b><br><span class="sub">你的 Agent 产生的经验属于你，可确权、可流通。</span></div>
+</div>
+
+<h2>三层架构（Open Protocol）</h2>
+<div class="card">
+<table>
+<tr><th>层</th><th>解决什么</th><th>开源级别</th></tr>
+<tr><td><b>L1 · 路由决策</b></td><td>选对模型/Provider，三级选品：安全→效率→成本，行为可审计</td><td><span class="tag t-open">🟢 协议开源</span><span class="tag t-verify">🟡 策略自配</span></td></tr>
+<tr><td><b>L2 · 经验工厂</b></td><td>认知沉淀：冲突修正/错误复利/经验复利，三层认知记忆</td><td><span class="tag t-open">🟢 架构开源</span><span class="tag t-verify">🟡 权重自调</span></td></tr>
+<tr><td><b>L3 · 确权交易</b></td><td>经验证明+产权确权+市场流通，Web5 数据主权</td><td><span class="tag t-open">🟢 协议+验证开源</span><span class="tag t-verify">🟡 估值自研</span></td></tr>
+</table>
+<p class="sub" style="margin-top:8px">🟢 = 你可以接入/理解/验证/替换的开放协议 | 🟡 = 各团队自由接入自己的策略（不锁死，鼓励自定义）</p>
+</div>
+
+<h2>你拿到的是开放协议，不是黑盒</h2>
+<div class="card">
+<p><b>LAO 开放这些，欢迎接入 + 替换 + 验证：</b></p>
+<div style="margin:10px 0">
+<span class="pill">RoutingProtocol 路由契约</span>
+<span class="pill">TaskClassifier 任务分类</span>
+<span class="pill">CostTracker 成本追踪</span>
+<span class="pill">SwitchAudit 切换审计</span>
+<span class="pill">CognitivePolicy 认知策略注入</span>
+<span class="pill">FeedbackBus 反馈总线</span>
+<span class="pill">ExperienceContract 经验契约</span>
+<span class="pill">Consent 授权门</span>
+<span class="pill">Attestation 经验证明</span>
+<span class="pill">TrustEvent 信任事件</span>
+<span class="pill">Ownership 产权确权</span>
+<span class="pill">Melody 市场协议</span>
+</div>
+<p class="sub">这些是<b>接口/协议/结构</b>——协议全部开放，你的 Agent 可以接入、理解、验证，甚至替换其中任意一环。</p>
+</div>
+
+<h2>可信验证能力（向所有人开放）</h2>
+<div class="card">
+<p><b>LAO 的核心承诺——错误不会降低信任，隐藏错误才降低信任。</b></p>
+<ul>
+<li><b>Trust Event Ledger</b> — 所有行为/错误/修正，可验证的信任账本</li>
+<li><b>Attestation</b> — 经验可被独立验证真实性与归属</li>
+<li><b>Hash + Verification</b> — 隐私友好，验证明文不暴露原始数据</li>
+<li><b>审计链</b> — Agent 决策链可被独立验证，无人能篡改</li>
+</ul>
+</div>
+
+<h2>接入 LAO（快速开始）</h2>
+<div class="card">
+<pre>
+from lao import LAOAgent
+
+agent = LAOAgent()
+# 观察行为 → 沉淀经验 → 构建约束
+agent.watch(user_id="u1", behavior_text="用户今天完成了3组深蹲")
+agent.add_constraint("价格超$99不推荐", trigger="预算", level="yellow")
+# 你的 Agent 从此记住、可信、可约束</pre>
+<p class="sub">完整示例见 <code>examples/</code> · 协议见 <code>docs/L1-routing-v3.1-design.md</code></p>
+</div>
+
+<h2>开源 + 你的数据主权</h2>
+<div class="card">
+<div class="grid">
+<div><b class="big">Apache 2.0</b><br><span class="sub">协议与代码全开放，可自由接入/分叉/商用</span></div>
+<div><b class="big">数据属于你</b><br><span class="sub">经验确权，DID 持有，平台技术上无法访问原始数据</span></div>
+<div><b class="big">Web5 原生</b><br><span class="sub">数据主权 + 去中心化身份 + 经验资产化</span></div>
+</div>
+</div>
+
+<div class="cta">
+<p>加入 LAO，让你的 Agent 成为第一批 Web5 原著民。</p>
+<p style="font-size:13px;margin-top:8px;font-weight:400">开源协议 · 可信验证 · 经验确权 → 现在就接入</p>
+</div>
+
+</body>
+</html>
