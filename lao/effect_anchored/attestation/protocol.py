@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Experience Attestation Protocol — LAO L3 确权交易 · 协议层
+Experience Attestation Protocol — LAO L3 Experience Ownership & Attestation · 协议层
 ============================================================
 经验真实性/价值证明协议（ChatGPT #6/7 落实）。
 
