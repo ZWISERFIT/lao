@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LAO 三层架构（终版）</title>
+<style>
+:root{--navy:#002B5C;--red:#FF0000;--bg:#0b1220;--card:#141d33;--line:#223047;--txt:#e6ecf5;--sub:#8ea0b8;--accent:#5aa9ff;--green:#4ade80;--warn:#ffb020;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.6;padding:28px;max-width:1020px;margin:0 auto}
+h1{font-size:23px;color:#fff;margin-bottom:4px}
+h2{font-size:17px;color:var(--accent);margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+h3{font-size:14.5px;color:#fff;margin:16px 0 6px}
+p,li{font-size:13.5px}
+.sub{color:var(--sub);font-size:13px;margin-bottom:22px}
+.meta{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 16px;font-size:13px;margin-bottom:16px}
+.meta b{color:var(--green)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin-bottom:12px}
+.module{font-family:ui-monospace,monospace;font-size:12px;color:#c8d3e0;background:#0e1626;border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin:8px 0}
+th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--sub);font-weight:600;white-space:nowrap}
+ul{padding-left:20px}li{margin:3px 0}
+.good{color:var(--green)}.warn{color:var(--warn)}.bad{color:#ff5a5a}
+.note{background:#1c2438;border-left:3px solid var(--accent);padding:10px 14px;border-radius:0 6px 6px 0;font-size:12.5px;margin:8px 0}
+</style>
+</head>
+<body>
+
+<h1>LAO — Logically Anchored Ontology</h1>
+<div class="sub">三层架构终版 · 完整通用组件 · 开源 Apache-2.0 · LAO 与 ZWISERFIT-OS 拆分后</div>
+
+<div class="meta">
+<b>包名:</b> <span class="module">lao-human-calibration</span> v0.2.0-beta &nbsp;|&nbsp; <b>License:</b> Apache-2.0 &nbsp;|&nbsp; <b>定位:</b> 让 Agent 不再忘事、不再胡说，像人一样记住真实经验并自动复利。<br>
+<b>结构:</b> 三层（L1 路由决策 / L2 经验工厂 / L3 确权交易）· 用户下载的完整通用组件
+</div>
+
+<h2>一、架构总览</h2>
+<div class="card">
+<p>LAO 是 <b>Agent 的人性校准层 + 可靠性框架</b>，由三层组成，用户下载的是<b>完整组件</b>：</p>
+<table>
+<tr><th style="width:120px">层</th><th>职责</th><th>核心模块</th></tr>
+<tr><td><b>L1 路由决策</b></td><td>模型智能选择 + 降级 + 成本追踪</td><td class="module">routing/</td></tr>
+<tr><td><b>L2 经验工厂</b></td><td>真实经验沉淀 → 可复用可验证锚点（含行为引擎内核）</td><td class="module">effect_anchored/ + core/</td></tr>
+<tr><td><b>L3 确权交易</b></td><td>经验产权、估值与安全交换边界</td><td class="module">contract / evaluator / consent / readiness</td></tr>
+</table>
+<div class="note"><b>关于"五引擎"：</b>五引擎（认知/经验/路由/演化/优化）是 <b>L2 经验工厂内的能力维度</b>，不是独立架构层。创始人的三层是架构分层，两者是同一事实的不同表述。</div>
+</div>
+
+<h2>二、L1 · 路由决策</h2>
+<div class="card">
+<p>根据任务分类选择最优模型，构建跨 provider 降级链路，杜绝 400 模型-端点不匹配。</p>
+<table>
+<tr><th>模块</th><th>职责</th></tr>
+<tr><td class="module">routing/model_router.py</td><td>模型路由与降级链路（三层 provider 故障转移）</td></tr>
+<tr><td class="module">routing/task_classifier.py</td><td>功耗感知式任务分类</td></tr>
+<tr><td class="module">routing/task_decomposer.py</td><td>复杂指令拆解 · 多模型组合路由</td></tr>
+<tr><td class="module">routing/agent_reliability.py</td><td>Agent 可靠性评分引擎</td></tr>
+<tr><td class="module">routing/cost_tracker.py</td><td>路由调用成本日志（远程成本汇·可配置）</td></tr>
+<tr><td class="module">routing/timeout_matrix.py · switch_audit.py</td><td>超时矩阵 · 切换审计</td></tr>
+</table>
+<div class="note">✅ <b>已泛化脱敏：</b>LAO 通用版中 provider 使用 <span class="module">provider_a / provider_b / provider_c</span> 通用标识，成本同步用 <span class="module">Remote cost sink</span>（可配置 URL）——不含任何 ZWISERFIT-OS 专有命名。ZWISERFIT-OS 内部部署版保留真实引用。</div>
+</div>
+
+<h2>三、L2 · 经验工厂</h2>
+<div class="card">
+<p>把真实经验沉淀为可复用、可验证的认知锚点，包含<b>行为引擎内核</b>（李人性层）。分四个能力块：</p>
+
+<h3>3.1 经验沉淀</h3>
+<table><tr><th>模块</th><th>职责</th></tr>
+<tr><td class="module">cognitive_anchor.py</td><td>Fact→Decision→Cognitive 三层认知锚点</td></tr>
+<tr><td class="module">memory_anchor.py</td><td>记忆锚定 · 持久化关键经验</td></tr>
+<tr><td class="module">effect_anchoring.py</td><td>经验锚定落地（E-Function）</td></tr>
+<tr><td class="module">evolution/atom_engine.py</td><td>Trust Event→Atom→Anchor 经验复利闭环</td></tr>
+<tr><td class="module">evolution/constraint_generator.py · rule_registry.py</td><td>错误→约束→Gate 纠错闭环</td></tr>
+</table>
+
+<h3>3.2 经验验证</h3>
+<table><tr><th>模块</th><th>职责</th></tr>
+<tr><td class="module">hallucination_gate.py</td><td>幻觉门 · 拦截无依据断言</td></tr>
+<tr><td class="module">feedback_bus.py</td><td>L3经验→L2锚点→L1路由 自动闭环回流</td></tr>
+<tr><td class="module">context_rebuilder.py</td><td>上下文重建（C-Function）</td></tr>
+<tr><td class="module">preference_firewall.py</td><td>偏好防火墙 · 效率与信任守卫</td></tr>
+</table>
+
+<h3>3.3 行为引擎（core/ · 李人性层内核）</h3>
+<table><tr><th>模块</th><th>职责</th></tr>
+<tr><td class="module">core/behavioral_markov_chain.py</td><td>行为马尔可夫链引擎（BMC）</td></tr>
+<tr><td class="module">core/behavior_tokenizer.py</td><td>行为 Tokenizer</td></tr>
+<tr><td class="module">core/human_nature_engine.py</td><td>李人性引擎顶层接口</td></tr>
+<tr><td class="module">core/intention_decay.py</td><td>意图衰减模型 · 行为轨迹</td></tr>
+</table>
+
+<h3>3.4 经验匹配</h3>
+<table><tr><th>模块</th><th>职责</th></tr>
+<tr><td class="module">experience_graph.py</td><td>similar_to / caused_by / derived_from 关系网络</td></tr>
+<tr><td class="module">experience_matching.py</td><td>带权限/契约过滤的已验证经验检索</td></tr>
+<tr><td class="module">ranking.py</td><td>检索排序</td></tr>
+</table>
+</div>
+
+<h2>四、L3 · 确权交易</h2>
+<div class="card">
+<p>经验的<b>产权、估值与安全交换边界</b>——确权机制属 LAO 通用组件（开源），交易市场实现归 ZWISERFIT-OS（闭源）。</p>
+<table>
+<tr><th>模块</th><th>职责</th><th>归属</th></tr>
+<tr><td class="module">experience_contract.py</td><td>经验共享安全契约 · 跨域污染保护</td><td class="good">✅ LAO（开源）</td></tr>
+<tr><td class="module">ethan/experience_evaluator.py</td><td>Ethan 三维评估（QS 认证）· 经验估值基础</td><td class="good">✅ LAO（开源）</td></tr>
+<tr><td class="module">consent_gate.py · consent_integration.py</td><td>用户同意门 · 运行时同意集成</td><td class="good">✅ LAO（开源）</td></tr>
+<tr><td class="module">experience_readiness.py</td><td>经验就绪度追踪</td><td class="good">✅ LAO（开源）</td></tr>
+<tr><td class="module">experience_graph.py / matching</td><td>图谱匹配 · 通用能力</td><td class="good">✅ LAO（开源）</td></tr>
+<tr><td class="warn">melody_interface.py / melody_builder/</td><td>积木式 Agent 组合与交易市场（DID/水印/定价/社群）</td><td class="bad">❌ ZWISERFIT-OS（闭源 Melody）</td></tr>
+</table>
+<div class="note">✅ <b>边界明确：</b>LAO = 确权机制（契约+评估+同意+就绪度），开源通用。Melody = 交易市场（定价阶梯 + DID 确权 + 哈希水印 + 社群），闭源归 ZWISERFIT-OS。LAO 只存契约/锚点/验证，不做身份/偏好/匹配的商用实现。</div>
+</div>
+
+<h2>五、数据模型与集成</h2>
+<div class="card">
+<ul>
+<li><span class="module">lao/schema.py</span>：Trust Event 与 VerifyPing 数据模型（贯穿全链路存证）</li>
+<li><span class="module">erge_writer.py</span>：三层认知锚点 → SQLite（ERGE）五表联动持久化</li>
+<li><span class="module">cli.py / init.py</span>：<span class="module">pip install lao-human-calibration</span> → <span class="module">from lao import LAOAgent; agent=LAOAgent(); agent.run()</span></li>
+<li><span class="module">dashboard/gen_dashboard.py</span>：LAO 可靠性仪表盘 HTML 生成</li>
+<li><span class="module">validation/skill_validator.py</span>：技能/能力边界校验</li>
+</ul>
+</div>
+
+<h2>六、开源边界（已与 ZWISERFIT-OS 拆分）</h2>
+<div class="card">
+<table>
+<tr><th>归属</th><th>内容</th></tr>
+<tr><td class="good">✅ LAO 开源（本组件）</td><td>L1 路由（已泛化脱敏）· L2 经验工厂（含 core 李人性层）· L3 确权机制（契约/评估/同意/就绪度）</td></tr>
+<tr><td class="bad">❌ ZWISERFIT-OS 闭源</td><td>Melody 交易市场（定价阶梯/DID/水印/社群）· Finance/Market/Board 运营层 · 内部成本/Agent 治理数据</td></tr>
+</table>
+<div class="note">LAO 与 ZWISERFIT-OS 是两个不同的代码库。本次文档仅含 LAO 三层架构（完整通用组件）。ZWISERFIT-OS 架构单独交付。</div>
+</div>
+
+</body>
+</html>

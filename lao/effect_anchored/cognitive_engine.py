@@ -31,21 +31,55 @@ Cognitive Engine — LAO v3.1 P0-17
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 
-# 三层权重(创始人设计·不可改)
-W_L1 = 0.40
-W_L2 = 0.35
-W_L3 = 0.25
+# 三层认知系统检索排列（创始人设计·完整编码化）
+#
+# ⚠️ IP 边界 (LAO v3.2 Open Protocol / Private Policy Refactor)
+# - 本文件开源【认知系统结构】：三层 L1/L2/L3、反馈关系、retrieve = Σ w_i * 得分
+# - 核心【参数策略】(l1/l2/l3 权重、复利增量、Tier0 阈值、升级阈值) 通过
+#   CognitivePolicy 注入，不再视为可公开硬编码的“配方”。
+# - ZWISERFIT-OS 私有部署通过 Private Cognitive Policy 注入真实参数；
+#   开源 default 仅提供结构示例值，不承载 Founder Proprietary 配方。
 
-# L1 经验复利增量(成功 → trigger_weight 立即 +0.3)
-EXPERIENCE_COMPOUND_DELTA = 0.3
 
-# L3 Tier0 永固阈值(>=0.8 视为不可改)
-TIER0_THRESHOLD = 0.8
+class CognitivePolicy:
+    """三层认知系统策略（公开结构·参数可注入）。
+
+    开源版默认值仅作为结构示例；真实“配方”由 ZWISERFIT-OS 的
+    Private Cognitive Policy 注入（见 CognitiveSystem(policy=...)）。
+    """
+    def __init__(
+        self,
+        l1_weight: float = 0.40,          # L1 实时迭代权重
+        l2_weight: float = 0.35,          # L2 短期品味权重
+        l3_weight: float = 0.25,          # L3 长期判断权重
+        compound_delta: float = 0.3,      # L1 经验复利增量(成功→trigger_weight 立即 +delta)
+        tier0_threshold: float = 0.8,     # L3 Tier0 永固阈值(>= 视为不可改)
+        error_escalation_count: int = 2,  # L1 错误升级阈值(2 次证据→升级 L2 锚点)
+    ):
+        self.l1_weight = l1_weight
+        self.l2_weight = l2_weight
+        self.l3_weight = l3_weight
+        self.compound_delta = compound_delta
+        self.tier0_threshold = tier0_threshold
+        self.error_escalation_count = error_escalation_count
+
+    def weights(self) -> Dict[str, float]:
+        return {"L1": self.l1_weight, "L2": self.l2_weight, "L3": self.l3_weight}
+
+
+# 默认策略（公开结构示例值；Private Cognitive Policy 可覆盖）
+DEFAULT_POLICY = CognitivePolicy()
+
+# 兼容旧常量引用（指向默认策略；新代码直接用 policy 实例）
+W_L1 = DEFAULT_POLICY.l1_weight
+W_L2 = DEFAULT_POLICY.l2_weight
+W_L3 = DEFAULT_POLICY.l3_weight
+EXPERIENCE_COMPOUND_DELTA = DEFAULT_POLICY.compound_delta
+TIER0_THRESHOLD = DEFAULT_POLICY.tier0_threshold
 
 
 def _now() -> datetime:
@@ -78,22 +112,24 @@ class L1RealTime:
         def on_error(self, error_signature: str, detail: str = "") -> str:
             """错误复利: 即时生成临时约束 → L2 异步升级锚点。
 
-            等 2 次相同错误证据 → 升级为更强的约束/锚点。
+            等 error_escalation_count 次相同错误证据 → 升级为更强的约束/锚点。
             """
             self._cog._error_counts[error_signature] = self._cog._error_counts.get(error_signature, 0) + 1
             count = self._cog._error_counts[error_signature]
+            esc = self._cog._policy.error_escalation_count
             constraint = {
                 "signature": error_signature, "detail": detail,
                 "temporary": True, "evidence_count": count,
-                "escalated": count >= 2,   # 2 次证据 → 升级 L2
+                "escalated": count >= esc,   # esc 次证据 → 升级 L2
                 "at": _now_iso(),
             }
             self._cog._temporary_constraints[error_signature] = constraint
             return error_signature
 
-        def on_success(self, anchor_id: str, delta: float = EXPERIENCE_COMPOUND_DELTA) -> float:
-            """经验复利: 做对的事 → 立即 +0.3 trigger_weight → 锚点立刻变强。"""
-            new_w = self._cog._weights.get(anchor_id, 0.0) + delta
+        def on_success(self, anchor_id: str, delta: Optional[float] = None) -> float:
+            """经验复利: 做对的事 → 立即 +compound_delta → 锚点立刻变强。"""
+            d = delta if delta is not None else self._cog._policy.compound_delta
+            new_w = self._cog._weights.get(anchor_id, 0.0) + d
             self._cog._weights[anchor_id] = round(new_w, 4)
             return self._cog._weights[anchor_id]
 
@@ -156,9 +192,9 @@ class L3LongTermJudgment:
             return round(min(1.0, hits / len(self._cog._unalterable)), 3)
 
         def is_unalterable(self, anchor: Dict[str, Any]) -> bool:
-            """Tier0 永固锚点判定(trust_weight >= 0.8 或显式 permanent)。"""
+            """Tier0 永固锚点判定(trust_weight >= tier0_threshold 或显式 permanent)。"""
             tw = float(anchor.get("trust_weight") or anchor.get("trust") or 0.0)
-            if tw >= TIER0_THRESHOLD:
+            if tw >= self._cog._policy.tier0_threshold:
                 return True
             if anchor.get("status") == "permanent" or anchor.get("permanent"):
                 return True
@@ -185,7 +221,8 @@ class CognitiveSystem:
       result = cs.retrieve("退款")   # 0.4*L1 + 0.35*L2 + 0.25*L3
     """
 
-    def __init__(self, recent_cap: int = 200):
+    def __init__(self, recent_cap: int = 200, policy: Optional[CognitivePolicy] = None):
+        self._policy = policy or DEFAULT_POLICY
         self._recent_cap = recent_cap
         self._conflicts: Dict[str, Any] = {}          # L1 冲突(即时避让)
         self._error_counts: Dict[str, int] = {}       # L1 错误复利计数
@@ -197,6 +234,11 @@ class CognitiveSystem:
         self.L1 = L1RealTime(self)
         self.L2 = L2ShortTermTaste(self)
         self.L3 = L3LongTermJudgment(self)
+
+    @property
+    def policy(self) -> CognitivePolicy:
+        """当前认知策略（Private Cognitive Policy 可注入覆盖）。"""
+        return self._policy
 
     # -- L3 注册 Tier0 ------------------------------------------------------
 
@@ -228,16 +270,17 @@ class CognitiveSystem:
 
     def retrieve(self, query: str) -> Dict[str, Any]:
         """三层综合检索排列:
-            0.4*L1 得分 + 0.35*L2 得分 + 0.25*L3 得分
+            w1*L1 得分 + w2*L2 得分 + w3*L3 得分   (权重来自策略)
         """
+        p = self._policy
         l1 = self._l1_score(query)
         l2 = self.L2.taste(query)
         l3 = self.L3.judge(query)
-        final = round(W_L1 * l1 + W_L2 * l2 + W_L3 * l3, 4)
+        final = round(p.l1_weight * l1 + p.l2_weight * l2 + p.l3_weight * l3, 4)
         return {
             "query": query,
             "l1": l1, "l2": l2, "l3": l3,
-            "weights": {"l1": W_L1, "l2": W_L2, "l3": W_L3},
+            "weights": p.weights(),
             "final_score": final,
         }
 
