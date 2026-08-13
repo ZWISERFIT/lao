@@ -30,11 +30,19 @@ def _sha256(text: str) -> str:
 class TrustEvent:
     """A single externally-verifiable trust event.
 
+    v3.3 Phase1 Step2 (创始人终审 P0-2): TrustEvent = 全系统唯一事件骨架。
+    所有重要事件都是 TrustEvent subtype, 通过 `subtype` 字段区分, 消灭多账本:
+
+        subtype ∈ { DecisionEvent, ContextEvent, RuntimeEvent,
+                    RecoveryEvent, ExperienceEvent, OwnershipEvent }
+        domain   ∈ { ui, gateway, network, session, agent, model,
+                     provider, tool, context, ... }  (FailureDomain 分组用·P0-9)
+
     Mirrors the recorded ledger structure (E-SHUYU / E-LUNA / S-LAO series).
     """
     event_id: str
     date: str
-    type: str                # "success" | "failure"
+    type: str                # "success" | "failure" | "decision" | "context" | ...
     failure: str             # description (for failure) / result (success)
     evidence: str = ""       # reproducible evidence
     detection: str = ""
@@ -44,6 +52,8 @@ class TrustEvent:
     status: str = "OPEN"     # "OPEN" | "CLOSED"
     future_prevention: str = ""
     agent: str = ""          # producing agent id
+    subtype: str = "RuntimeEvent"   # v3.3: 唯一骨架之事件子类(六类)
+    domain: str = ""               # v3.3: FailureDomain 分组(ui/gateway/network/...)
     # VerifyPing proof fields (added at verify time)
     hash: str = ""
     verified: bool = False
@@ -127,6 +137,8 @@ def make_event(
     new_anchor: Optional[list] = None,
     future_prevention: str = "",
     ledger: TrustEventLedger | None = None,
+    subtype: str = "RuntimeEvent",   # v3.3: 唯一骨架之事件子类(六类)
+    domain: str = "",               # v3.3: FailureDomain 分组
 ) -> TrustEvent:
     """Convenience factory that dedups event ids against an existing ledger."""
     lg = ledger or TrustEventLedger()
@@ -143,5 +155,7 @@ def make_event(
         status="CLOSED" if repair else "OPEN",
         future_prevention=future_prevention,
         agent=agent,
+        subtype=subtype,   # v3.3 唯一骨架
+        domain=domain,     # v3.3 FailureDomain
     )
     return lg.append(ev)
