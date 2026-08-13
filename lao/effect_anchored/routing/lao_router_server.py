@@ -74,6 +74,52 @@ logger = logging.getLogger("lao-router")
 app = FastAPI(title="lao-router", version="1.0.0")
 router = ModelRouter()
 
+# ── Phase A/B: OpenAI 兼容参数过滤层 + Provider Capability Detection ──
+# 防止未知参数(如 thinking)被直接透传到 OpenAI SDK → 400/TypeError
+SUPPORTED_PARAMS = {
+    "model", "messages", "temperature", "max_tokens", "top_p", "n",
+    "stream", "tools", "tool_choice", "response_format", "stop", "frequency_penalty",
+    "presence_penalty", "logprobs", "seed", "user", "stream_options",
+}
+
+# ProviderCapabilityRegistry: 各模型支持的能力(thinking/reasoning_content/tools/stream)
+# 不支持的参数 → 自动 drop + CapabilityFallbackEvent(不报错)
+ProviderCapabilityRegistry = {
+    "deepseek-v4-flash": {"thinking": False, "reasoning_content": True, "tools": True, "stream": True},
+    "deepseek-v4-pro":   {"thinking": False, "reasoning_content": True, "tools": True, "stream": True},
+    "default":           {"thinking": False, "reasoning_content": True, "tools": True, "stream": True},
+}
+
+
+def _capability(model: str) -> dict:
+    """获取模型能力(默认按 default 兜底)。"""
+    for k in ("deepseek-v4-flash", "deepseek-v4-pro"):
+        if k in model:
+            return ProviderCapabilityRegistry[k]
+    return ProviderCapabilityRegistry["default"]
+
+
+def _safe_payload(body: dict, chosen_model: str) -> tuple[dict, list]:
+    """过滤未知参数 + 基于能力的参数协商。
+
+    Returns:
+        (payload: 仅含支持的参数, fallback_events: CapabilityFallbackEvent 列表)
+    """
+    cap = _capability(chosen_model)
+    payload = {k: v for k, v in body.items() if k in SUPPORTED_PARAMS}
+    payload["model"] = chosen_model
+    events = []
+    # 能力协商: body 中存在的参数但 provider 不支持 → drop + 记录事件
+    for param, supported in (("thinking", cap.get("thinking", False)),):
+        if param in body and not supported:
+            payload.pop(param, None)
+            events.append({
+                "type": "CapabilityFallbackEvent",
+                "reason": f"{param} unsupported by {chosen_model}",
+                "model": chosen_model, "param": param,
+            })
+    return payload, events
+
 # 每日成本累计(成本红线)
 _lock = threading.Lock()
 _daily_cost = {"date": time.strftime("%Y-%m-%d"), "total_usd": 0.0}
@@ -161,15 +207,16 @@ async def chat_completions(request: Request):
     chosen_model = sel.model
     chosen_provider = sel.provider
 
-    # ③ 转发真实 DeepSeek(route()保证 provider/model 端点可用·防400)
+    # ③ 转发真实 DeepSeek(白名单过滤 + 能力协商·防未知参数透传)
     client = OpenAI(api_key=DEEPSEEK_KEY, base_url=DEEPSEEK_BASE, timeout=300)
-    payload = {**body, "model": chosen_model}
+    payload, cap_events = _safe_payload(body, chosen_model)
     started = time.time()
     try:
         resp = client.chat.completions.create(**payload)
     except Exception as e:
         _log_event({"tier": tier, "chosen_model": chosen_model, "provider": chosen_provider,
-                    "budget": budget, "status": "error", "error": str(e)[:200]})
+                    "budget": budget, "status": "error", "error": str(e)[:200],
+                    "capability_events": cap_events})
         return JSONResponse({"error": {"message": str(e), "type": "lao_router_forward"}}, status_code=502)
 
     latency_ms = int((time.time() - started) * 1000)
@@ -205,6 +252,7 @@ async def chat_completions(request: Request):
         "input_tokens": in_tok, "output_tokens": out_tok,
         "cost_yuan": round(cost_yuan, 6), "latency_ms": latency_ms, "stream": stream,
         "fallback_chain": sel.fallback_chain,
+        "capability_events": cap_events,   # Phase A/B: 参数过滤事件(TrustEvent 链)
     })
 
     return resp
