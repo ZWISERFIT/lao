@@ -166,10 +166,7 @@ async def chat_completions(request: Request):
     payload = {**body, "model": chosen_model}
     started = time.time()
     try:
-        if stream:
-            resp = client.chat.completions.create(**payload)
-        else:
-            resp = client.chat.completions.create(**payload)
+        resp = client.chat.completions.create(**payload)
     except Exception as e:
         _log_event({"tier": tier, "chosen_model": chosen_model, "provider": chosen_provider,
                     "budget": budget, "status": "error", "error": str(e)[:200]})
@@ -177,7 +174,20 @@ async def chat_completions(request: Request):
 
     latency_ms = int((time.time() - started) * 1000)
 
-    # ④ 成本记录(按官方单价·¥/1M)
+    # ③.5 流式响应: 必须流式转发(OpenClaw 用 streaming)·否则 SSE 序列化失败
+    if stream:
+        def _sse_gen():
+            try:
+                for chunk in resp:   # OpenAI Stream 迭代
+                    # 保持 OpenAI SSE 格式
+                    yield "data: " + chunk.model_dump_json() + "\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                logger.error(f"stream error: {e}")
+                yield f"data: {{\"error\":{{\"message\":\"{e}\",\"type\":\"lao_router_stream\"}}}}\n\n"
+        return StreamingResponse(_sse_gen(), media_type="text/event-stream")
+
+    # ④ 成本记录(仅非流式·流式在 chunk 末尾拿 usage)
     usage = getattr(resp, "usage", None)
     in_tok = getattr(usage, "prompt_tokens", 0) if usage else 0
     out_tok = getattr(usage, "completion_tokens", 0) if usage else 0
