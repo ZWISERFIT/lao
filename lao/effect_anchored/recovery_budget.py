@@ -69,10 +69,10 @@ class RecoveryBudget:
     def approve(self) -> None:
         """人类批准继续(人工接管后)."""
         self.human_approved = True
-        self.state = STATE_ESCALATED if not self.pivot_reason else STATE_ASCALATED_APPROVED
+        self.state = STATE_ESCALATED
+        self.pivot_reason += " | human_approved"
 
 
-STATE_ASCALATED_APPROVED = "escalated_approved"
 
 
 @dataclass
