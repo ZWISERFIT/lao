@@ -90,7 +90,7 @@ def _now_iso() -> str:
     return _now().isoformat()
 
 
-class L1RealTime:
+class CogL1RealTime:
     """L1 实时迭代: 冲突修正 + 错误复利 + 经验复利(毫秒级)。"""
 
     class _Engine:
@@ -140,7 +140,7 @@ class L1RealTime:
         self.on_success = self._Engine(cognitive).on_success
 
 
-class L2ShortTermTaste:
+class CogL2ShortTermTaste:
     """L2 短期品味: 修养 + 见识 + 情感(近期模式·分钟/小时级)。"""
 
     class _Engine:
@@ -173,7 +173,7 @@ class L2ShortTermTaste:
         self.taste = self._Engine(cognitive).taste
 
 
-class L3LongTermJudgment:
+class CogL3LongTermJudgment:
     """L3 长期判断: 世界观 + 价值观 + 人生观(Tier0 永固)。"""
 
     class _Engine:
@@ -207,6 +207,19 @@ class L3LongTermJudgment:
 
 
 class CognitiveSystem:
+    """Founder Cognitive Engine (C-Layer·创始人终审 2026-08-13 P0-1 命名隔离)。
+
+    这是 **Founder Cognitive Layer (C)** 的运行时入口，与 LAO **Architecture Layer (A)**
+    通过显式命名空间隔离，不互相混用：
+
+        A-Layer (架构层·机制在外)   vs   C-Layer (认知层·机制在内)
+        A-L1 Runtime Decision            C-L1 Real-time Adaptation   (CogL1RealTime)
+        A-L2 Experience Factory          C-L2 Short-term Taste        (CogL2ShortTermTaste)
+        A-L3 Ownership & Attestation     C-L3 Long-term Judgment      (CogL3LongTermJudgment)
+
+    原则(创始人终审): 重命名不重构 · 隔离语义不修改机制 · 保留 0.40/0.35/0.25 原始认知权重。
+    该机制属于创始人认知资产，**不进入普通 Policy 生命周期**、不允许被其他模块覆盖。
+    """
     """三层认知系统(完整编码化)。
 
     L1 实时迭代(0.4) + L2 短期品味(0.35) + L3 长期判断(0.25)。
@@ -231,9 +244,9 @@ class CognitiveSystem:
         self._recent_experiences: List[Dict[str, Any]] = []  # L2 近期经验
         self._unalterable: List[str] = []             # L3 Tier0 永固锚点 id
         # 三层
-        self.L1 = L1RealTime(self)
-        self.L2 = L2ShortTermTaste(self)
-        self.L3 = L3LongTermJudgment(self)
+        self.L1 = CogL1RealTime(self)
+        self.L2 = CogL2ShortTermTaste(self)
+        self.L3 = CogL3LongTermJudgment(self)
 
     @property
     def policy(self) -> CognitivePolicy:
