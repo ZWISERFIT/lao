@@ -26,8 +26,10 @@ from typing import Dict, List, Optional
 # 模型基准成本($/1K tokens·用于计算 original_cost)
 MODEL_BASELINE_COST = {
     # 若不用 LAO 路由, 默认全用 pro(最贵) → original_cost 基线
-    "deepseek-v4-pro": {"input": 0.003, "output": 0.006},   # $/1K tokens
-    "deepseek-v4-flash": {"input": 0.001, "output": 0.002},
+    # [V·Nova unit-price-model-v2·官方CSV固定价·20260814]
+    # 真实单价: cache_miss 档(缓存失效=成本暴涨场景·作为基线)·$/1K tokens
+    "deepseek-v4-pro": {"input": 0.003, "output": 0.006},   # $/1K (= $3/$6 per 1M·cache_miss档)
+    "deepseek-v4-flash": {"input": 0.001, "output": 0.002}, # $/1K (= $1/$2 per 1M·cache_miss档)
     # 其他模型按 pro 兜底(未路由=用贵模型)
     "default": {"input": 0.003, "output": 0.006},
 }
