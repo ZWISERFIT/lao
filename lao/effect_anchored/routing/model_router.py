@@ -263,6 +263,9 @@ class ModelRouter:
             raise PermissionError(f"[route] {_why}")
 
         tier = self.classifier.classify(task)
+        # 根治 Nova 根因1: 若 task 本身是合法 tier 名(light/medium/...), 直接用·避免被 classify 误判 default=medium
+        if task.strip().lower() in self.MODEL_POOL:
+            tier = task.strip().lower()
 
         code_keywords = ["代码", "编程", "测试", "函数", "类", "API", "接口",
                          "重构", "调试", "debug", "code", "function", "class",

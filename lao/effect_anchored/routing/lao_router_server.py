@@ -215,11 +215,21 @@ def _infer_tier(messages: List[Dict], model_hint: str = "") -> str:
 
     规则: 显式 header → model名 → 内容长度/复杂度启发式。
     """
-    # model 名可直接映射
+    # model 名可直接映射(优先·避免 model 名被内容启发式误判)
     m = (model_hint or "").lower()
     if "ultra" in m or "tiny" in m: return "ultra_light"
-    if "flash" in m and ("reason" in m or "code" in m): return "code"
+    if "flash" in m:
+        # v4-flash → 低成本 tier(用户显式要 flash = 便宜优先·不因内容误判升 pro)
+        if "reason" in m or "code" in m:
+            return "code"
+        return "light"
     if "reason" in m: return "reasoning"
+    if "pro" in m:
+        # v4-pro → 重活(用户显式要 pro·质量优先)
+        if "reason" in m: return "reasoning"
+        if "code" in m or "coder" in m: return "code"
+        if "heavy" in m: return "heavy"
+        return "medium"
     if "code" in m or "coder" in m: return "code"
     # 内容启发式
     text = " ".join(str(x.get("content", "")) for x in messages)[:2000]
@@ -272,10 +282,12 @@ async def chat_completions(request: Request):
     # ① 任务分层
     tier = request.headers.get("x-lao-tier", "") or _infer_tier(messages, model_hint)
 
-    # ② 成本红线路由
+    # ② 成本红线路由(用已算好的 tier 而非把 model 名当 task·根治 Nova 根因1)
     budget = _remaining_budget()
     try:
-        sel: RouteSelection = router.route_with_budget(task=model_hint, budget=budget)
+        # 关键修复: 不把 model_hint(如 deepseek-momo/deepseek-v4-flash)当 task 传给 classify
+        # → 用 _infer_tier 已算出的 tier, 避免 model 名走 classify default=medium → 误判 pro
+        sel: RouteSelection = router.route_with_budget(task=tier or model_hint, budget=budget)
     except Exception as e:
         logger.error(f"route_with_budget失败({e}), 使用默认")
         sel = router.route("light")
