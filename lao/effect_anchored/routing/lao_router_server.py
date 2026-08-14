@@ -65,6 +65,82 @@ def _get_deepseek_key() -> str:
     return ""
 
 DEEPSEEK_KEY = _get_deepseek_key()
+
+# ── 多 Provider 转发配置(任务自动配对 LLM 的核心) ──
+# 之前断点: 决策层(model_router)能选 provider, 但转发层硬编码 deepseek。
+# 现在: 按 chosen_provider 动态选择 base_url + api_key, 实现跨 provider 自动配对。
+def _read_secret(var_name: str) -> str:
+    """从环境变量或 secrets.env 读 key。"""
+    v = os.environ.get(var_name, "")
+    if v and not v.startswith("placeholder"):
+        return v
+    try:
+        for line in open("/home/agentuser/.openclaw/secrets.env"):
+            line = line.strip()
+            if line.startswith(var_name + "="):
+                v = line.split("=", 1)[1].strip().strip('"').strip("'")
+                if v and not v.startswith("placeholder"):
+                    return v
+    except Exception:
+        pass
+    return ""
+
+# 三 provider 转发配置(与 model_router.MODEL_POOL 的 provider 字段对齐)
+PROVIDER_CONFIG = {
+    "deepseek": {
+        "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        "api_key": DEEPSEEK_KEY,
+    },
+    "token-plan": {
+        "base_url": os.environ.get("TOKEN_PLAN_BASE_URL", "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"),
+        "api_key": _read_secret("OC_TOKEN_PLAN_API_KEY"),
+    },
+    "novarouteai": {
+        "base_url": os.environ.get("NOVAROUTE_BASE_URL", "https://novarouteai.com/v1"),
+        "api_key": _read_secret("NOVAROUTEAI_API_KEY") or os.environ.get("NOVAROUTEAI_API_KEY", ""),
+    },
+}
+
+# ── 按 Agent 分发独立 key(治本·解决共用Tristan key的B1盲点) ──
+# DeepSeek 官方按 API key 归因用量。共用 1 个 key → 后台分不清哪个 Agent / 缓存失效 miss 暴增。
+# 现在: 从请求 model_hint 前缀(如 deepseek-momo/...)或 x-lao-agent header 识别 Agent, 用其独立 key。
+AGENT_KEYS = {
+    "tristan": _read_secret("OC_DEEPSEEK_TRISTAN_API_KEY"),
+    "baron": _read_secret("OC_DEEPSEEK_BARON_API_KEY"),
+    "ethan": _read_secret("OC_DEEPSEEK_ETHAN_API_KEY"),
+    "luna": _read_secret("OC_DEEPSEEK_LUNA_API_KEY"),
+    "momo": _read_secret("OC_DEEPSEEK_MOMO_API_KEY"),
+    "nova": _read_secret("OC_DEEPSEEK_NOVA_API_KEY"),
+    "shuyu": _read_secret("OC_DEEPSEEK_SHUYU_API_KEY"),
+    "stella": _read_secret("OC_DEEPSEEK_STELLA_API_KEY"),
+    "zeus": _read_secret("OC_DEEPSEEK_ZEUS_API_KEY"),
+}
+
+def _extract_agent(model_hint: str, headers: Dict) -> str:
+    """从请求提取 Agent 名(用于分发独立 key)。"""
+    # 优先 header 显式标注
+    h = (headers.get("x-lao-agent") or "").strip().lower()
+    if h in AGENT_KEYS:
+        return h
+    # 从 model_hint 前缀提取: 'deepseek-momo/deepseek-v4-flash' → 'momo'
+    m = (model_hint or "").lower()
+    if "/" in m:
+        prefix = m.split("/")[0]
+        for agent in AGENT_KEYS:
+            if prefix.endswith(agent):
+                return agent
+    return ""
+
+def _provider_client(provider: str, agent: str = ""):
+    """按 provider 返回 OpenAI client(动态 base_url + key·支持按 Agent 分发独立 key)。"""
+    cfg = PROVIDER_CONFIG.get(provider) or PROVIDER_CONFIG["deepseek"]
+    # 若是 deepseek 且识别到 Agent → 用该 Agent 独立 key(治本·后台可归因)
+    if provider in ("deepseek", "") and agent in AGENT_KEYS and AGENT_KEYS[agent]:
+        return OpenAI(api_key=AGENT_KEYS[agent], base_url=cfg["base_url"], timeout=300)
+    if not cfg["api_key"]:
+        cfg = PROVIDER_CONFIG["deepseek"]
+    return OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"], timeout=300)
+
 # 每日预算($USD·成本红线·Private Policy 可调)
 DAILY_BUDGET = float(os.environ.get("LAO_DAILY_BUDGET_USD", "5.0"))
 
@@ -207,8 +283,11 @@ async def chat_completions(request: Request):
     chosen_model = sel.model
     chosen_provider = sel.provider
 
-    # ③ 转发真实 DeepSeek(白名单过滤 + 能力协商·防未知参数透传)
-    client = OpenAI(api_key=DEEPSEEK_KEY, base_url=DEEPSEEK_BASE, timeout=300)
+    # 按 Agent 分发独立 key(治本·B1)
+    agent = _extract_agent(model_hint, dict(request.headers))
+
+    # ③ 转发真实 provider(按 chosen_provider 动态选 base_url + key·白名单过滤+能力协商)
+    client = _provider_client(chosen_provider, agent)
     payload, cap_events = _safe_payload(body, chosen_model)
     started = time.time()
     try:
