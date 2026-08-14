@@ -49,6 +49,16 @@ class RouteSelection:
     fallback_chain: list
 
 
+# 创始人 B 阶段(2026-08-14): Agent → Provider 绑定分组
+# baron/ethan/momo → token-plan(百炼·qwen/glm 有补贴)
+# 其余 Agent 默认 deepseek(不在表 = deepseek)
+AGENT_PROVIDER_BINDING = {
+    "baron": "token-plan",
+    "ethan": "token-plan",
+    "momo": "token-plan",
+}
+
+
 class ModelRouter:
     """根据任务难度层级路由到最合适的模型。
 
@@ -127,43 +137,59 @@ class ModelRouter:
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
+            {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "light": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
+            {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "medium": [
             {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
+            {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
         ],
         "heavy": [
             {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
+            {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "reasoning": [
             {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
+            {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "code": [
             {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
+            {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "cn_explain": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
+            {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "cn_creative": [
             {"model": "deepseek-v4-pro", "provider": "deepseek", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "novarouteai", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-pro", "provider": "token-plan", "credit": False, "quality": 0.92, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
+            {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
     }
 
@@ -233,6 +259,7 @@ class ModelRouter:
         task: str,
         budget: float | None = None,
         credit_mode: str = "prefer",  # "prefer" | "force" | "avoid"
+        agent: str = "",              # 创始人 B 阶段: 按 Agent 绑定 provider
     ) -> RouteSelection:
         """根据任务文本路由到最优模型。
 
@@ -244,6 +271,9 @@ class ModelRouter:
                 - "prefer": 优先credit消费，深度推理类仍用DeepSeek
                 - "force": 全部走credit (除reasoning层)
                 - "avoid": 不走credit，全DeepSeek
+            agent: 创始人 B 阶段(2026-08-14) — 按 Agent 绑定 provider。
+                若 agent 绑定 token-plan(baron/ethan/momo) → 只在 token-plan 池选
+                否则 → 默认 deepseek 池。
 
         Returns:
             RouteSelection 包含所选模型、provider、层级、成本和降级链路。
@@ -274,6 +304,15 @@ class ModelRouter:
             tier = "code"
 
         pool = self.MODEL_POOL.get(tier, self.MODEL_POOL["medium"])
+
+        # 创始人 B 阶段(2026-08-14): 按 Agent 绑定 provider 过滤
+        # baron/ethan/momo → token-plan 池(只选 token-plan 的 model)
+        # 其他 agent → 只选 deepseek 池
+        if agent:
+            bind_provider = AGENT_PROVIDER_BINDING.get(agent, "deepseek")
+            bound = [e for e in pool if e.get("provider") == bind_provider]
+            if bound:  # 绑定 provider 有可用 model → 只用它
+                pool = bound
 
         # credit_mode过滤
         if credit_mode == "avoid":
@@ -342,6 +381,7 @@ class ModelRouter:
         task: str,
         budget: float,
         latency_preference: str | None = None,
+        agent: str = "",              # 创始人 B 阶段: 按 Agent 绑定 provider
     ) -> RouteSelection:
         """考虑预算约束的路由(成本红线·T1 真实启用)。
 
@@ -357,7 +397,7 @@ class ModelRouter:
         Returns:
             RouteSelection，预算约束下最优选择。
         """
-        return self.route(task, budget=budget)
+        return self.route(task, budget=budget, agent=agent)
 
     def explain_route(self, selection: RouteSelection) -> str:
         """生成人类可读的路由解释。

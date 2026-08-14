@@ -282,21 +282,22 @@ async def chat_completions(request: Request):
     # ① 任务分层
     tier = request.headers.get("x-lao-tier", "") or _infer_tier(messages, model_hint)
 
+    # 按 Agent 分发独立 key(治本·B1)·创始人 B 阶段: 先提取 agent 供路由绑定 provider
+    agent = _extract_agent(model_hint, dict(request.headers))
+
     # ② 成本红线路由(用已算好的 tier 而非把 model 名当 task·根治 Nova 根因1)
     budget = _remaining_budget()
     try:
         # 关键修复: 不把 model_hint(如 deepseek-momo/deepseek-v4-flash)当 task 传给 classify
         # → 用 _infer_tier 已算出的 tier, 避免 model 名走 classify default=medium → 误判 pro
-        sel: RouteSelection = router.route_with_budget(task=tier or model_hint, budget=budget)
+        # 创始人 B 阶段: 传 agent 实现按 Agent 绑定 provider(baron/ethan/momo→token-plan)
+        sel: RouteSelection = router.route_with_budget(task=tier or model_hint, budget=budget, agent=agent)
     except Exception as e:
         logger.error(f"route_with_budget失败({e}), 使用默认")
         sel = router.route("light")
 
     chosen_model = sel.model
     chosen_provider = sel.provider
-
-    # 按 Agent 分发独立 key(治本·B1)
-    agent = _extract_agent(model_hint, dict(request.headers))
 
     # ③ 转发真实 provider(按 chosen_provider 动态选 base_url + key·白名单过滤+能力协商)
     client = _provider_client(chosen_provider, agent)
