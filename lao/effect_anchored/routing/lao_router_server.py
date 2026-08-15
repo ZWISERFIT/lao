@@ -307,7 +307,7 @@ async def chat_completions(request: Request):
         resp = client.chat.completions.create(**payload)
     except Exception as e:
         _log_event({"tier": tier, "chosen_model": chosen_model, "provider": chosen_provider,
-                    "budget": budget, "status": "error", "error": str(e)[:200],
+                    "agent": agent, "budget": budget, "status": "error", "error": str(e)[:200],
                     "capability_events": cap_events})
         return JSONResponse({"error": {"message": str(e), "type": "lao_router_forward"}}, status_code=502)
 
@@ -324,6 +324,15 @@ async def chat_completions(request: Request):
             except Exception as e:
                 logger.error(f"stream error: {e}")
                 yield f"data: {{\"error\":{{\"message\":\"{e}\",\"type\":\"lao_router_stream\"}}}}\n\n"
+        # 台账修复(创始人令): stream 请求也必须记录事件日志(agent 标识·否则台账全空)
+        _log_event({
+            "tier": tier, "chosen_model": chosen_model, "provider": chosen_provider,
+            "agent": agent, "requested_model": model_hint, "budget_remaining": round(budget, 4),
+            "degraded": "flash" in chosen_model and "pro" in str(model_hint).lower(),
+            "input_tokens": 0, "output_tokens": 0, "stream": True,
+            "cost_yuan": 0.0, "latency_ms": latency_ms,
+            "fallback_chain": sel.fallback_chain, "capability_events": cap_events,
+        })
         return StreamingResponse(_sse_gen(), media_type="text/event-stream")
 
     # ④ 成本记录(仅非流式·流式在 chunk 末尾拿 usage)
@@ -339,7 +348,7 @@ async def chat_completions(request: Request):
 
     _log_event({
         "tier": tier, "chosen_model": chosen_model, "provider": chosen_provider,
-        "requested_model": model_hint, "budget_remaining": round(budget, 4),
+        "agent": agent, "requested_model": model_hint, "budget_remaining": round(budget, 4),
         "degraded": "flash" in chosen_model and "pro" in str(model_hint).lower(),
         "input_tokens": in_tok, "output_tokens": out_tok,
         "cost_yuan": round(cost_yuan, 6), "latency_ms": latency_ms, "stream": stream,
