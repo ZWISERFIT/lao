@@ -47,13 +47,18 @@ class RuntimeHealthEvent:
         }
 
 
-# ── RIS 事件类型清单（对应 5 类运行健康信号）──
+# ── RIS 事件类型清单（对应 5 类运行健康信号 + 运行期扩展）──
 RIS_EVENT_TYPES = (
     "session_recovery",      # 会话故障自动恢复
     "gateway_recovery",      # 网关异常恢复
     "cpu_anomaly",           # CPU 异常检测
     "provider_isolation",    # provider 失效隔离
     "config_drift",          # config drift 检测
+    # ── P0-1 Provider 健康监控接入（成熟部署加速·Shuyu 立项）──
+    "provider_unavailable",  # provider 不可用（lao-router/直连 deepseek）·带 cost_impact
+    "provider_ok",           # provider 健康（recovered 对偶信号）
+    # ── P0-2 CPU 自动恢复（成熟部署加速·Shuyu 立项）──
+    "cpu_recovery",          # CPU 持续 >90% → 自动恢复闭环(recovered 对偶信号)
 )
 
 __all__ = ["RuntimeHealthEvent", "RIS_EVENT_TYPES"]

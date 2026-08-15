@@ -1,0 +1,1385 @@
+{
+  "layer": "ris",
+  "schema_version": "1.0",
+  "generated_at": "2026-08-15T15:48:39.540451+00:00",
+  "window": {
+    "since": "2026-08-15T04:14:58.063634+00:00",
+    "events_total": 1966
+  },
+  "summary": {
+    "events_by_type": {
+      "gateway_down": 3,
+      "lao_router_down": 4,
+      "session_bloat": 1318,
+      "cpu_anomaly": 628,
+      "mcp_leak": 11,
+      "cpu_recovery": 2
+    },
+    "recoveries": {
+      "cpu_recovery": 2
+    },
+    "provider_status": {},
+    "latest_cpu_pct": 100.0,
+    "latest_mem_pct": 0.0
+  },
+  "recent_events": [
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 82
+      },
+      "ts": "2026-08-15T15:37:47.828716+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 82
+      },
+      "ts": "2026-08-15T15:37:54.614411+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 82
+      },
+      "ts": "2026-08-15T15:38:06.216833+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 82
+      },
+      "ts": "2026-08-15T15:38:37.447838+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "cpu_pct": 80.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:39:07.995301+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 82
+      },
+      "ts": "2026-08-15T15:39:08.732840+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:39:40.591094+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:40:12.300958+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:40:43.021340+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:40:45.735292+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:41:17.163926+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:41:48.999831+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 98.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:42:19.640358+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:42:21.362864+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 99.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:42:28.864815+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:42:31.529191+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:42:52.000380+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:42:53.911581+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:43:24.517822+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:43:25.920319+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 94.9,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:43:32.946072+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:43:34.065926+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 98.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:44:04.632405+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:44:06.646075+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 99.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:44:37.264104+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:44:39.342445+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:45:09.943806+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:45:11.157623+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:45:41.794727+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:45:43.104203+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:46:13.703923+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:46:16.598854+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:46:47.176944+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:46:48.585528+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_recovery",
+      "agent_id": "system",
+      "status": "recovered",
+      "severity": "warn",
+      "detail": {
+        "classified": "cpu_sustained",
+        "attempts": 1,
+        "verified": true,
+        "recorded": true,
+        "detect": "cpu_sustained detected",
+        "top_processes": [
+          {
+            "pid": 100878,
+            "name": "python3",
+            "cpu_pct": 37.7,
+            "cmd": "python3 -c"
+          },
+          {
+            "pid": 4108899,
+            "name": "qodercli",
+            "cpu_pct": 29.9,
+            "cmd": "qodercli -p"
+          },
+          {
+            "pid": 3383726,
+            "name": "YDService",
+            "cpu_pct": 20.0,
+            "cmd": "/usr/local/qcloud/YunJing/YDEyes/YDService"
+          }
+        ],
+        "peak_cpu": 95.0
+      },
+      "ts": "2026-08-15T15:47:08.773346+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 97.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:47:19.149225+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:47:20.477964+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 96.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:47:51.042363+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:47:52.321090+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 93.9,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:48:04.909065+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:48:06.125309+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 96.9,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:48:12.755777+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:48:13.955398+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 96.9,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:48:16.949706+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_recovery",
+      "agent_id": "system",
+      "status": "recovered",
+      "severity": "warn",
+      "detail": {
+        "classified": "cpu_sustained",
+        "attempts": 1,
+        "verified": true,
+        "recorded": true,
+        "detect": "cpu_sustained detected",
+        "top_processes": [
+          {
+            "pid": 280624,
+            "name": "node",
+            "cpu_pct": 80.3,
+            "cmd": "/usr/bin/node /home/agentuser/.npm-global/lib/node_modules/openclaw/dist/index.js"
+          },
+          {
+            "pid": 199997,
+            "name": "python3",
+            "cpu_pct": 17.9,
+            "cmd": "python3 -c"
+          },
+          {
+            "pid": 3383726,
+            "name": "YDService",
+            "cpu_pct": 15.7,
+            "cmd": "/usr/local/qcloud/YunJing/YDEyes/YDService"
+          }
+        ],
+        "peak_cpu": 97.1
+      },
+      "ts": "2026-08-15T15:48:18.452309+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:48:18.952597+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:48:22.225778+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:48:22.973279+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:48:24.301276+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "session_bloat",
+      "agent_id": "sessions",
+      "status": "detected",
+      "severity": "warn",
+      "detail": {
+        "files": [
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+            "mb": 9.8
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+            "mb": 9.9
+          },
+          {
+            "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+            "mb": 9.9
+          }
+        ],
+        "count": 83
+      },
+      "ts": "2026-08-15T15:48:24.983666+00:00"
+    }
+  ],
+  "active_alerts": [
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:45:41.794727+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:46:13.703923+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:46:47.176944+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 97.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:47:19.149225+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 96.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:47:51.042363+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 93.9,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:48:04.909065+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 96.9,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:48:12.755777+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 96.9,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:48:16.949706+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:48:22.225778+00:00"
+    },
+    {
+      "layer": "ris",
+      "event_type": "cpu_anomaly",
+      "agent_id": "system",
+      "status": "detected",
+      "severity": "error",
+      "detail": {
+        "cpu_pct": 100.0,
+        "threshold": 80.0
+      },
+      "ts": "2026-08-15T15:48:22.973279+00:00"
+    }
+  ]
+}

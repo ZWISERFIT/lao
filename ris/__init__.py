@@ -35,6 +35,9 @@ from lao.effect_anchored.routing_state_guard import RoutingStateGuard  # noqa: F
 # ── 第三阶段：RuntimeHealthEvent（RIS 运行健康事件）──
 from ris.events import RuntimeHealthEvent, RIS_EVENT_TYPES  # noqa: F401
 
+# ── RIS→LAO 数据桥（P0-3·成熟部署加速·Shuyu立项）──
+from ris.bridge import RISToLAOBridge, sync_bridge, BRIDGE_FILE  # noqa: F401
+
 __all__ = [
     # Process Health
     "RuntimeRegistry",
@@ -49,6 +52,10 @@ __all__ = [
     # Events（第三阶段）
     "RuntimeHealthEvent",
     "RIS_EVENT_TYPES",
+    # RIS→LAO 数据桥（P0-3）
+    "RISToLAOBridge",
+    "sync_bridge",
+    "BRIDGE_FILE",
 ]
 
 __version__ = "1.0.0"

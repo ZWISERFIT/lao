@@ -99,8 +99,13 @@ def test_config_drift_detection():
 
 # ── 附带：RIS 事件类型完整性 + re-export 模块可导入 ───────
 def test_ris_event_types_complete():
-    """RIS 5 类事件类型完整。"""
-    expected = {"session_recovery", "gateway_recovery", "cpu_anomaly", "provider_isolation", "config_drift"}
+    """RIS 事件类型完整（5 类核心 + P0-1 Provider 监控扩展）。"""
+    expected = {"session_recovery", "gateway_recovery", "cpu_anomaly",
+                "provider_isolation", "config_drift",
+                # P0-1 Provider 健康监控接入（成熟部署加速·Shuyu 立项）
+                "provider_unavailable", "provider_ok",
+                # P0-2 CPU 自动恢复（成熟部署加速·Shuyu 立项）
+                "cpu_recovery"}
     assert set(RIS_EVENT_TYPES) == expected
 
 
