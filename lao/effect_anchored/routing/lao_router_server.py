@@ -302,6 +302,10 @@ async def chat_completions(request: Request):
     # ③ 转发真实 provider(按 chosen_provider 动态选 base_url + key·白名单过滤+能力协商)
     client = _provider_client(chosen_provider, agent)
     payload, cap_events = _safe_payload(body, chosen_model)
+    # P0-2 命中率99.9%: 传独立 user_id(DeepSeek 官方 KVCache 隔离机制)
+    # 每个 agent 独立 user → 缓存按 agent 隔离·前缀更稳定·miss 降(官方CSV: miss价是hit价120倍)
+    if agent:
+        payload["user"] = f"lao-{agent}"
     started = time.time()
     try:
         resp = client.chat.completions.create(**payload)
