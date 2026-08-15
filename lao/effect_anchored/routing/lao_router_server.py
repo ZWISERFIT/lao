@@ -358,6 +358,7 @@ async def chat_completions(request: Request):
             "agent": agent, "requested_model": model_hint, "budget_remaining": round(budget, 4),
             "degraded": "flash" in chosen_model and "pro" in str(model_hint).lower(),
             "input_tokens": 0, "output_tokens": 0, "stream": True,
+            "cache_hit_tokens": 0, "cache_miss_tokens": 0, "task_type": tier,  # 命中率字段(stream·usage在chunk末尾)
             "cost_yuan": 0.0, "latency_ms": latency_ms,
             "fallback_chain": sel.fallback_chain, "capability_events": cap_events,
         })
@@ -367,6 +368,10 @@ async def chat_completions(request: Request):
     usage = getattr(resp, "usage", None)
     in_tok = getattr(usage, "prompt_tokens", 0) if usage else 0
     out_tok = getattr(usage, "completion_tokens", 0) if usage else 0
+    # 命中率 99.9%(Stella/创始人令 2026-08-15): 提取 cache 字段算命中率
+    # DeepSeek usage: prompt_cache_hit_tokens(命中) / prompt_cache_miss_tokens(未命中)
+    cache_hit = getattr(usage, "prompt_cache_hit_tokens", 0) if usage else 0
+    cache_miss = getattr(usage, "prompt_cache_miss_tokens", 0) if usage else 0
     # 单价(¥/1M): pro 3/6, flash 1/2
     ci = 3 if "pro" in chosen_model else 1
     co = 6 if "pro" in chosen_model else 2
@@ -379,6 +384,10 @@ async def chat_completions(request: Request):
         "agent": agent, "requested_model": model_hint, "budget_remaining": round(budget, 4),
         "degraded": "flash" in chosen_model and "pro" in str(model_hint).lower(),
         "input_tokens": in_tok, "output_tokens": out_tok,
+        # 命中率数据基础(按 agent×task×时段分析):
+        "cache_hit_tokens": cache_hit,     # prompt_cache_hit_tokens(命中)
+        "cache_miss_tokens": cache_miss,   # prompt_cache_miss_tokens(未命中)
+        "task_type": tier,                 # 任务归类(light/medium/reasoning/...)
         "cost_yuan": round(cost_yuan, 6), "latency_ms": latency_ms, "stream": stream,
         "fallback_chain": sel.fallback_chain,
         "capability_events": cap_events,   # Phase A/B: 参数过滤事件(TrustEvent 链)
