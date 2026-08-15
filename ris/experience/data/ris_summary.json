@@ -1,0 +1,366 @@
+{
+ "source": "ris-events.jsonl",
+ "total_events": 2000,
+ "generated_at": "2026-08-15T23:55:04.745866",
+ "by_event_type": {
+  "gateway_down": 3,
+  "lao_router_down": 4,
+  "session_bloat": 1332,
+  "cpu_anomaly": 643,
+  "mcp_leak": 11,
+  "cpu_recovery": 7
+ },
+ "by_severity": {
+  "critical": 7,
+  "warn": 1396,
+  "error": 597
+ },
+ "by_agent": {
+  "gateway": 3,
+  "lao-router": 4,
+  "sessions": 1332,
+  "system": 650,
+  "mcp": 11
+ },
+ "active_risks": [
+  {
+   "event_type": "cpu_anomaly",
+   "agent_id": "system",
+   "severity": "error",
+   "detail": {
+    "cpu_pct": 98.0,
+    "threshold": 80.0
+   },
+   "ts": "2026-08-15T15:52:08.221279+00:00"
+  },
+  {
+   "event_type": "cpu_anomaly",
+   "agent_id": "system",
+   "severity": "error",
+   "detail": {
+    "cpu_pct": 100.0,
+    "threshold": 80.0
+   },
+   "ts": "2026-08-15T15:52:10.323600+00:00"
+  },
+  {
+   "event_type": "session_bloat",
+   "agent_id": "sessions",
+   "severity": "warn",
+   "detail": {
+    "files": [
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+      "mb": 9.8
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+      "mb": 9.9
+     }
+    ],
+    "count": 83
+   },
+   "ts": "2026-08-15T15:52:11.611134+00:00"
+  },
+  {
+   "event_type": "cpu_anomaly",
+   "agent_id": "system",
+   "severity": "error",
+   "detail": {
+    "cpu_pct": 98.0,
+    "threshold": 80.0
+   },
+   "ts": "2026-08-15T15:52:42.214999+00:00"
+  },
+  {
+   "event_type": "session_bloat",
+   "agent_id": "sessions",
+   "severity": "warn",
+   "detail": {
+    "files": [
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+      "mb": 9.8
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+      "mb": 9.9
+     }
+    ],
+    "count": 83
+   },
+   "ts": "2026-08-15T15:52:43.700578+00:00"
+  },
+  {
+   "event_type": "cpu_anomaly",
+   "agent_id": "system",
+   "severity": "error",
+   "detail": {
+    "cpu_pct": 100.0,
+    "threshold": 80.0
+   },
+   "ts": "2026-08-15T15:53:14.335856+00:00"
+  },
+  {
+   "event_type": "session_bloat",
+   "agent_id": "sessions",
+   "severity": "warn",
+   "detail": {
+    "files": [
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+      "mb": 9.8
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+      "mb": 9.9
+     }
+    ],
+    "count": 83
+   },
+   "ts": "2026-08-15T15:53:16.319338+00:00"
+  },
+  {
+   "event_type": "cpu_anomaly",
+   "agent_id": "system",
+   "severity": "error",
+   "detail": {
+    "cpu_pct": 100.0,
+    "threshold": 80.0
+   },
+   "ts": "2026-08-15T15:53:34.402054+00:00"
+  },
+  {
+   "event_type": "session_bloat",
+   "agent_id": "sessions",
+   "severity": "warn",
+   "detail": {
+    "files": [
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+      "mb": 9.8
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+      "mb": 9.9
+     }
+    ],
+    "count": 83
+   },
+   "ts": "2026-08-15T15:53:35.758658+00:00"
+  },
+  {
+   "event_type": "cpu_anomaly",
+   "agent_id": "system",
+   "severity": "error",
+   "detail": {
+    "cpu_pct": 97.0,
+    "threshold": 80.0
+   },
+   "ts": "2026-08-15T15:53:36.844384+00:00"
+  },
+  {
+   "event_type": "session_bloat",
+   "agent_id": "sessions",
+   "severity": "warn",
+   "detail": {
+    "files": [
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+      "mb": 9.8
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+      "mb": 9.9
+     }
+    ],
+    "count": 83
+   },
+   "ts": "2026-08-15T15:53:38.330991+00:00"
+  },
+  {
+   "event_type": "cpu_anomaly",
+   "agent_id": "system",
+   "severity": "error",
+   "detail": {
+    "cpu_pct": 99.0,
+    "threshold": 80.0
+   },
+   "ts": "2026-08-15T15:54:08.995455+00:00"
+  },
+  {
+   "event_type": "session_bloat",
+   "agent_id": "sessions",
+   "severity": "warn",
+   "detail": {
+    "files": [
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+      "mb": 9.8
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+      "mb": 9.9
+     }
+    ],
+    "count": 83
+   },
+   "ts": "2026-08-15T15:54:10.604047+00:00"
+  },
+  {
+   "event_type": "cpu_anomaly",
+   "agent_id": "system",
+   "severity": "error",
+   "detail": {
+    "cpu_pct": 100.0,
+    "threshold": 80.0
+   },
+   "ts": "2026-08-15T15:54:41.270771+00:00"
+  },
+  {
+   "event_type": "session_bloat",
+   "agent_id": "sessions",
+   "severity": "warn",
+   "detail": {
+    "files": [
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+      "mb": 9.8
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+      "mb": 9.9
+     }
+    ],
+    "count": 83
+   },
+   "ts": "2026-08-15T15:54:42.508824+00:00"
+  },
+  {
+   "event_type": "cpu_anomaly",
+   "agent_id": "system",
+   "severity": "error",
+   "detail": {
+    "cpu_pct": 99.0,
+    "threshold": 80.0
+   },
+   "ts": "2026-08-15T15:55:03.137472+00:00"
+  },
+  {
+   "event_type": "session_bloat",
+   "agent_id": "sessions",
+   "severity": "warn",
+   "detail": {
+    "files": [
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/144c2ab9-c113-4bb7-90c4-5b64f1626ddc.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-06T13-49-07-675Z_0b8a1944-3bdd-4ba5-88e7-bb273240ff25.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-07-29T03-15-34-676Z_4c0cf605-62c1-4b99-966b-43721d048596.trajectory.jsonl",
+      "mb": 9.8
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-07T08-41-50-292Z_c903d63d-103a-4d44-8a0f-bd478cb20dcd.trajectory.jsonl",
+      "mb": 9.9
+     },
+     {
+      "file": "/home/agentuser/.openclaw/agents/luna/sessions/2026-08-09T04-35-00-890Z_a3c53706-6a8c-4762-acde-b0808b0c373c.trajectory.jsonl",
+      "mb": 9.9
+     }
+    ],
+    "count": 83
+   },
+   "ts": "2026-08-15T15:55:04.660987+00:00"
+  }
+ ],
+ "recommendation": "session_bloat 高频: 建议清理 >8MB 旧 session(webchat 性能根因·用户可感知)"
+}

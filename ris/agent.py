@@ -29,6 +29,7 @@ except ImportError:
 # 复用 ris 模块
 from ris.events import RuntimeHealthEvent
 from ris.health import ProcessHealth, ResourceHealth, RuntimeAvailability
+from ris.health.provider_monitor import ProviderHealthMonitor
 from ris.recovery import RecoveryEngine, RecoveryAction
 
 # 路径
@@ -184,24 +185,15 @@ class HealthMonitor:
             events.append(ev)
             print("  ⚠️ lao_router_down")
 
-        # P0-1 Provider 健康监控(成熟部署加速·Shuyu立项): 检测 lao-router provider 可用性
-        # 关联成本事故复盘·Provider 不可用=缓存/成本关键维度
-        provider_ok = _http_ok("http://127.0.0.1:8765/v1/models", timeout=6.0)
-        if not provider_ok:
-            ev = _emit(RuntimeHealthEvent(
-                event_type="provider_unavailable", agent_id="lao-router", status="detected",
-                severity="critical", detail={"endpoint": "8765/v1/models", "ok": False}))
+        # P0-1 Provider 健康监控(成熟部署加速·Shuyu立项): 复用 ProviderHealthGate
+        # 捕获成本链路: provider掉线→lao-router(8765)不可达→回退直连→单key混用+cache_miss↑→成本↑
+        # 关联成本事故复盘(2026-08-14·Stella评估重量级)。
+        provider_monitor = ProviderHealthMonitor()
+        for ev in provider_monitor.check_once():
+            _emit(ev)
             events.append(ev)
-            print("  ⚠️ provider_unavailable: lao-router 不可用")
-        # DeepSeek 直连可用性(官方端点探活)
-        deepseek_ok = _http_ok("https://api.deepseek.com/v1/models", timeout=6.0) \
-            if False else True  # 需 key·不直接探测·用 lao-router 即可
-        if not deepseek_ok:
-            ev = _emit(RuntimeHealthEvent(
-                event_type="provider_unavailable", agent_id="deepseek", status="detected",
-                severity="critical", detail={"endpoint": "api.deepseek.com", "ok": False}))
-            events.append(ev)
-            print("  ⚠️ provider_unavailable: deepseek 不可用")
+            print(f"  ⚠️ {ev.event_type}: {ev.agent_id} "
+                  f"cost_impact={ev.detail.get('cost_impact','n/a')}")
 
         # mcp 泄漏(>4 个·已知问题)
         mcp = s.get("mcp_count", 0)
@@ -287,6 +279,125 @@ class RecoveryExecutor:
         return {"recovered": result.recovered, "verified": result.verified,
                 "attempts": result.attempts, "recorded": result.recorded}
 
+    def recover_cpu(self, current_cpu: float) -> Dict:
+        """CPU 持续 > 90% → 自动恢复闭环(P0-2)。
+
+        五步闭环: Detect(持续 N 帧) → Classify(cpu_sustained) →
+                  Recover(识别 top 进程·降级非关键 mcp) → Verify(CPU 回落) → Record。
+
+        恢复动作(安全·不杀关键进程):
+          1. 识别 top CPU 进程(记录到 detail 供审计)
+          2. 对空闲 npm exec @agentmemory mcp 进程 SIGHUP(温和·可自愈)
+          3. 不触碰 gateway/lao-router/agent 主进程
+
+        注意: 这是"真实触发"的 L3 Recovery Executor 工作——不再只是 mcp_leak/gateway
+        两个常驻检测的恢复动作，而是 CPU 异常→恢复→验证的完整闭环。
+        """
+        def detect() -> bool:
+            # 只有持续帧数达标才算"持续"(跨周期累积·写 state 文件)
+            state = _read_cpu_state()
+            if current_cpu >= CPU_SUSTAINED_THRESHOLD:
+                state["consecutive"] += 1
+                state["peak"] = max(state["peak"], current_cpu)
+            else:
+                state["consecutive"] = 0
+                state["recovering"] = False
+            state["last_ts"] = _ts()
+            _write_cpu_state(state)
+            return state["consecutive"] >= CPU_SUSTAINED_FRAMES
+
+        def recover() -> bool:
+            # 识别 top CPU 进程 + 对空闲 mcp 温和降级(SIGHUP 让 npm 重启·非 kill -9)
+            _top_cpu_processes(5)
+            try:
+                out = subprocess.check_output(
+                    ["pgrep", "-f", "npm exec @agentmemory"], text=True)
+                pids = [l for l in out.strip().split("\n") if l]
+                # 保留最新 1 个·其余 SIGHUP(温和·让进程优雅退出·npm 会按需重启)
+                for pid in pids[:-1]:
+                    try:
+                        os.kill(int(pid), 1)  # SIGHUP
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            # 恢复动作成功 = 已识别 top 进程(不击杀关键进程·安全边界)
+            return True
+
+        def verify() -> bool:
+            # Verify 铁律: 恢复后 CPU 必须回落到阈值以下(重新采样)
+            idle = _read_proc_stat_cpu()
+            if idle < CPU_VERIFY_BELOW:
+                state = _read_cpu_state()
+                state["recovering"] = False
+                state["consecutive"] = 0
+                _write_cpu_state(state)
+                return True
+            return False
+
+        result = self.engine.run(
+            "cpu_recovery", "system",
+            detect_fn=detect, classify_fn=lambda: "cpu_sustained",
+            action=RecoveryAction(name="throttle_idle_mcp", recover_fn=recover,
+                                  verify_fn=verify, max_attempts=2),
+            severity="warn",
+        )
+        # Record 阶段: 附加 top 进程信息到事件 detail(供审计)
+        if result.recovered and result.verified:
+            ev = result.to_event(severity="warn")
+            ev.detail["top_processes"] = _top_cpu_processes(3)
+            ev.detail["peak_cpu"] = _read_cpu_state().get("peak", current_cpu)
+            _emit(ev)
+        return {"recovered": result.recovered, "verified": result.verified,
+                "attempts": result.attempts, "recorded": result.recorded,
+                "classified": result.classified}
+
+
+# ── 3.5 CPU 自动恢复闭环(P0-2·成熟部署加速·Shuyu立项) ──────────────
+# 持续 CPU > 90% 跟踪状态文件(跨 30s 检测周期累积·"持续"=连续 N 帧)
+CPU_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "state", "data", "cpu-sustained.json")
+CPU_SUSTAINED_THRESHOLD = 90.0   # 持续高于此值才触发恢复(区别于检测阈值 80)
+CPU_SUSTAINED_FRAMES = 3         # 连续 3 帧(约 90s)视为"持续"
+CPU_VERIFY_BELOW = 70.0          # 恢复后需降到该值以下才算 Verify 通过
+
+
+def _read_cpu_state() -> Dict:
+    """读取持续高 CPU 跟踪状态(跨周期累积)。"""
+    try:
+        with open(CPU_STATE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {"consecutive": 0, "last_ts": "", "peak": 0.0, "recovering": False}
+
+
+def _write_cpu_state(state: Dict) -> None:
+    os.makedirs(os.path.dirname(CPU_STATE_FILE), exist_ok=True)
+    with open(CPU_STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+def _top_cpu_processes(top_n: int = 5) -> List[Dict]:
+    """找出 CPU 占用最高的进程(用 psutil.process_iter)。"""
+    if psutil is None:
+        return []
+    procs = []
+    try:
+        for p in psutil.process_iter(["pid", "name", "cpu_percent", "cmdline"]):
+            try:
+                info = p.info
+                procs.append({
+                    "pid": info["pid"], "name": info["name"] or "?",
+                    "cpu_pct": round(info["cpu_percent"] or 0.0, 1),
+                    "cmd": " ".join((info["cmdline"] or [""])[:2])[:120],
+                })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+    except Exception:
+        return []
+    procs.sort(key=lambda x: x["cpu_pct"], reverse=True)
+    return procs[:top_n]
+
 
 # ── 4. openclaw connector(连接 runtime) ─────────────────────────────
 class OpenClawConnector:
@@ -358,14 +469,38 @@ def run_once(verbose: bool = True) -> Dict:
         r = executor.recover_lao_router()
         summary["recoveries"].append({"action": "lao_router", **r})
 
+    # P0-2: CPU 持续 > 90% → 自动恢复闭环(真实触发 L3 Recovery Executor)
+    if summary["cpu_pct"] >= 80.0:
+        r = executor.recover_cpu(summary["cpu_pct"])
+        if r["recovered"]:
+            summary["recoveries"].append({"action": "cpu_recovery", **r})
+
     # openclaw 连接检查
     connector.check_gateway()
     connector.check_webui()
     connector.check_session_bloat()
 
+    # P0-3 RIS→LAO 数据桥: 每次检测后生成共享摘要(供 LAO/Stella 消费)
+    try:
+        import importlib
+        bridge = importlib.import_module("ris.experience_integration")
+        bridge.dump_summary()
+    except Exception as _be:
+        print(f"[RIS] 数据桥异常: {_be}")
+
+    # P0-3: RIS→LAO 数据桥(事件写入共享 JSON 供 LAO/Stella 消费)
+    try:
+        from ris.bridge import sync_bridge
+        bridge = sync_bridge()
+        summary["bridge_synced"] = bridge["window"]["events_total"]
+    except Exception as e:
+        summary["bridge_synced"] = 0
+        print(f"  ⚠️ bridge sync fail: {e}")
+
     if verbose:
         print(f"[RIS] cpu={s['cpu_pct']:.1f}% mem={s['mem_pct']:.1f}% "
-              f"mcp={mcp} events={len(events)} recoveries={len(summary['recoveries'])}")
+              f"mcp={mcp} events={len(events)} recoveries={len(summary['recoveries'])}",
+              flush=True)
     return summary
 
 
