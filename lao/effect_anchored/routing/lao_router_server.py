@@ -132,14 +132,19 @@ def _extract_agent(model_hint: str, headers: Dict) -> str:
     return ""
 
 def _provider_client(provider: str, agent: str = ""):
-    """按 provider 返回 OpenAI client(动态 base_url + key·支持按 Agent 分发独立 key)。"""
+    """按 provider 返回 OpenAI client(动态 base_url + key·支持按 Agent 分发独立 key)。
+
+    命中率/成本治理(Stella 派单 2026-08-15):
+    - max_retries=1: 防失败重试风暴(thinking 失败时一次任务扣 3 次费)
+    - timeout=300 保持(复杂任务需要)
+    """
     cfg = PROVIDER_CONFIG.get(provider) or PROVIDER_CONFIG["deepseek"]
     # 若是 deepseek 且识别到 Agent → 用该 Agent 独立 key(治本·后台可归因)
     if provider in ("deepseek", "") and agent in AGENT_KEYS and AGENT_KEYS[agent]:
-        return OpenAI(api_key=AGENT_KEYS[agent], base_url=cfg["base_url"], timeout=300)
+        return OpenAI(api_key=AGENT_KEYS[agent], base_url=cfg["base_url"], timeout=300, max_retries=1)
     if not cfg["api_key"]:
         cfg = PROVIDER_CONFIG["deepseek"]
-    return OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"], timeout=300)
+    return OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"], timeout=300, max_retries=1)
 
 # 每日预算($USD·成本红线·Private Policy 可调)
 DAILY_BUDGET = float(os.environ.get("LAO_DAILY_BUDGET_USD", "5.0"))
@@ -188,6 +193,9 @@ def _safe_payload(body: dict, chosen_model: str, preserve_requested: bool = True
     """
     cap = _capability(chosen_model)
     payload = {k: v for k, v in body.items() if k in SUPPORTED_PARAMS}
+    # 命中率数据(Stella派单): stream 时强制 include_usage·否则 chunk 无 usage·cache 字段永远 0
+    if payload.get("stream") and "stream_options" not in payload:
+        payload["stream_options"] = {"include_usage": True}
     # 架构红线(固化): 稳定前缀 = 缓存命中
     # 不再强制 payload["model"]=chosen_model·保留请求方 model 保证前缀稳定
     requested = body.get("model", "") or ""
@@ -343,25 +351,37 @@ async def chat_completions(request: Request):
 
     # ③.5 流式响应: 必须流式转发(OpenClaw 用 streaming)·否则 SSE 序列化失败
     if stream:
+        # 命中率(Stella派单): 从流末尾 chunk 提取 usage(含 cache 字段)·stream 也要记录真实命中率
+        stream_usage = {"input": 0, "output": 0, "hit": 0, "miss": 0}
+
         def _sse_gen():
+            nonlocal stream_usage
             try:
                 for chunk in resp:   # OpenAI Stream 迭代
-                    # 保持 OpenAI SSE 格式
+                    # 保留 OpenAI SSE 格式
                     yield "data: " + chunk.model_dump_json() + "\n\n"
+                    # 流末尾 chunk 带 usage(含 cache)·提取真实命中率数据
+                    cu = getattr(chunk, "usage", None)
+                    if cu is not None:
+                        stream_usage["input"] = getattr(cu, "prompt_tokens", 0) or 0
+                        stream_usage["output"] = getattr(cu, "completion_tokens", 0) or 0
+                        stream_usage["hit"] = getattr(cu, "prompt_cache_hit_tokens", 0) or 0
+                        stream_usage["miss"] = getattr(cu, "prompt_cache_miss_tokens", 0) or 0
                 yield "data: [DONE]\n\n"
             except Exception as e:
                 logger.error(f"stream error: {e}")
                 yield f"data: {{\"error\":{{\"message\":\"{e}\",\"type\":\"lao_router_stream\"}}}}\n\n"
-        # 台账修复(创始人令): stream 请求也必须记录事件日志(agent 标识·否则台账全空)
-        _log_event({
-            "tier": tier, "chosen_model": chosen_model, "provider": chosen_provider,
-            "agent": agent, "requested_model": model_hint, "budget_remaining": round(budget, 4),
-            "degraded": "flash" in chosen_model and "pro" in str(model_hint).lower(),
-            "input_tokens": 0, "output_tokens": 0, "stream": True,
-            "cache_hit_tokens": 0, "cache_miss_tokens": 0, "task_type": tier,  # 命中率字段(stream·usage在chunk末尾)
-            "cost_yuan": 0.0, "latency_ms": latency_ms,
-            "fallback_chain": sel.fallback_chain, "capability_events": cap_events,
-        })
+            # 台账修复(创始人令)+命中率(Stella派单): 流结束后记录事件日志(agent标识·cache真实值)
+            _log_event({
+                "tier": tier, "chosen_model": chosen_model, "provider": chosen_provider,
+                "agent": agent, "requested_model": model_hint, "budget_remaining": round(budget, 4),
+                "degraded": "flash" in chosen_model and "pro" in str(model_hint).lower(),
+                "input_tokens": stream_usage["input"], "output_tokens": stream_usage["output"], "stream": True,
+                "cache_hit_tokens": stream_usage["hit"], "cache_miss_tokens": stream_usage["miss"], "task_type": tier,
+                "cost_yuan": 0.0, "latency_ms": latency_ms,
+                "fallback_chain": sel.fallback_chain, "capability_events": cap_events,
+            })
+        return StreamingResponse(_sse_gen(), media_type="text/event-stream")
         return StreamingResponse(_sse_gen(), media_type="text/event-stream")
 
     # ④ 成本记录(仅非流式·流式在 chunk 末尾拿 usage)
