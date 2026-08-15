@@ -204,8 +204,11 @@ def _safe_payload(body: dict, chosen_model: str, preserve_requested: bool = True
         payload["model"] = requested.split("/")[-1]
     else:
         payload["model"] = chosen_model
+    # P1 命中率优化(Shuyu派单 2026-08-15): 稳定前缀 + 历史剪枝
+    payload["messages"] = _stabilize_messages(payload.get("messages", []))
     events = []
     # 能力协商: body 中存在的参数但 provider 不支持 → drop + 记录事件
+    thinking_enabled = bool(cap.get("thinking", False)) and body.get("thinking") not in (None, False)
     for param, supported in (("thinking", cap.get("thinking", False)),):
         if param in body and not supported:
             payload.pop(param, None)
@@ -214,6 +217,15 @@ def _safe_payload(body: dict, chosen_model: str, preserve_requested: bool = True
                 "reason": f"{param} unsupported by {chosen_model}",
                 "model": chosen_model, "param": param,
             })
+    # 根治(成本事故复盘·成功率门禁): 只要未以 thinking 模式转发，就 strip 所有
+    # assistant 消息的 reasoning_content。
+    # 旧版只在 `thinking in body` 时 strip → 漏掉两种 400:
+    #   ① client 不发 thinking·但历史带 reasoning_content(上一个 thinking turn 残留)
+    #      → DeepSeek 400 "reasoning_content in thinking mode must be passed back"
+    #   ② thinking 被 drop 时 pop tool_calls → 工具链断裂 → 另两类 400
+    # 我们所有模型 thinking=False → 永不转发 thinking 模式 → reasoning_content 必须全清。
+    if not thinking_enabled:
+        _strip_reasoning_content(payload.get("messages", []))
     return payload, events
 
 
@@ -221,6 +233,76 @@ def _is_valid_model_name(model: str) -> bool:
     """判断 model 名是否有效(含已知模型名·防把随机字符串当 model)。"""
     m = (model or "").lower()
     return any(k in m for k in ("deepseek", "qwen", "glm", "kimi", "gpt", "flash", "pro"))
+
+
+# P1 命中率优化(Shuyu派单 2026-08-15): 稳定前缀 + 历史剪枝
+import re as _re
+
+# OpenClaw 注入的动态时间戳(每请求不同→前缀不稳定→缓存 miss)
+_TIMESTAMP_PAT = _re.compile(
+    r"Current time: [^\n]*\([^\n]*\)\nReference UTC: [^\n]*\n?")
+
+
+def _stabilize_messages(messages: list, max_history: int = 30) -> list:
+    """稳定前缀 = 缓存命中(架构红线落地)。
+
+    ① 归一化动态时间戳: OpenClaw 每请求注入 'Current time: ...' 不同 →
+       替换为固定占位符 → system 前缀稳定 → 缓存可命中。
+    ② 历史剪枝: 多轮对话历史过长 → 保留早期稳定前缀 + 截断变化历史
+       (过长历史=更多 miss·剪到 max_history 条·保留 system+早期)。
+    """
+    if not messages:
+        return messages
+    out = []
+    for m in messages:
+        c = m.get("content", "") if isinstance(m, dict) else ""
+        if isinstance(c, str) and "Current time:" in c:
+            m = dict(m)
+            m["content"] = _TIMESTAMP_PAT.sub("", c)  # 移除动态时间戳行
+        out.append(m)
+    # 历史剪枝: 保留 system + 前 max_history 条(早期稳定前缀)
+    if len(out) > max_history:
+        # 保留 system(如有)+ 前 max_history-1 条早期 + 最后 1 条(当前请求)
+        out = out[:max_history]
+    return out
+
+
+def _strip_reasoning_content(messages: list):
+    """P0修复(根治·LAO 成本事故复盘·成功率门禁): 当 thinking 被 drop 时，
+    只 strip assistant 消息的 reasoning_content，**绝不删 tool_calls**。
+
+    背景(两次 P0 事故根因·2026-08-15 Ethan 实测):
+    - 旧版 `m.pop("tool_calls", None)` 破坏了 tool-call 对话链 →
+      残留 role='tool' 消息失去前置 tool_calls →
+      DeepSeek 400: "Messages with role 'tool' must be a response to a
+      preceding message with 'tool_calls'".
+    - 旧版同时 pop reasoning_content + tool_calls → 若 assistant 消息原本
+      只有 reasoning_content / tool_calls 而无 content → 变成空消息 →
+      DeepSeek 400: "Invalid assistant message: content or tool_calls must be set".
+
+    根治原则:
+    ① 只删 reasoning_content(thinking 模式下必须传回的字段)·tool_calls 是
+       function-calling 链的合法部分·v4-flash 支持 tools → 必须保留。
+    ② 删掉 reasoning_content 后若 assistant 消息既无 content 又无 tool_calls
+       (空消息)→ 补一个空串占位 content·否则触发 400 空消息。
+    ③ 保留 tool_calls 时·其后续 role='tool' 消息天然合法·不再孤儿。
+    """
+    for m in messages:
+        if isinstance(m, dict) and m.get("role") == "assistant":
+            m.pop("reasoning_content", None)
+            # 根治: 删 reasoning_content 后若消息为空(content/tool_calls 均无)→补占位
+            # 增强: content 可能是空 list 或 [{'type':'text','text':''}] (OpenClaw 多模态残留)
+            #       → DeepSeek 400 空消息·统一归一为空串
+            content = m.get("content")
+            if isinstance(content, list):
+                if not content or all(
+                    isinstance(c, dict) and not (c.get("text") or c.get("image_url") or c.get("input") or c.get("tool_code_execution"))
+                    for c in content
+                ):
+                    m["content"] = ""  # 空/纯占位 list → 空串(避免 DeepSeek 400 空消息)
+            if not m.get("content") and not m.get("tool_calls"):
+                m["content"] = ""
+
 
 # 每日成本累计(成本红线)
 _lock = threading.Lock()
