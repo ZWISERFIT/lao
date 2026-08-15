@@ -36,7 +36,7 @@ from openai import OpenAI
 # LAO 路由核心(已实现·T1成本红线真实生效)
 import sys
 sys.path.insert(0, "/home/agentuser/lao-release")
-from lao.effect_anchored.routing.model_router import ModelRouter, RouteSelection
+from lao.effect_anchored.routing.model_router import ModelRouter, RouteSelection, AGENT_PROVIDER_BINDING
 
 # ── 配置 ─────────────────────────────────────────────
 PORT = int(os.environ.get("LAO_ROUTER_PORT", "8765"))
@@ -175,15 +175,27 @@ def _capability(model: str) -> dict:
     return ProviderCapabilityRegistry["default"]
 
 
-def _safe_payload(body: dict, chosen_model: str) -> tuple[dict, list]:
+def _safe_payload(body: dict, chosen_model: str, preserve_requested: bool = True) -> tuple[dict, list]:
     """过滤未知参数 + 基于能力的参数协商。
+
+    命中率 99.9% P0-1(智囊团决议 2026-08-15): 缓存键 bug 修复。
+    关键: **保留请求方 model(稳定前缀=缓存命中)**·不再无条件覆盖。
+    - preserve_requested=True(默认): payload["model"]=请求方 model(若有效)
+    - 仅当请求方 model 为空/无效时才用 chosen_model(兜底)
 
     Returns:
         (payload: 仅含支持的参数, fallback_events: CapabilityFallbackEvent 列表)
     """
     cap = _capability(chosen_model)
     payload = {k: v for k, v in body.items() if k in SUPPORTED_PARAMS}
-    payload["model"] = chosen_model
+    # 架构红线(固化): 稳定前缀 = 缓存命中
+    # 不再强制 payload["model"]=chosen_model·保留请求方 model 保证前缀稳定
+    requested = body.get("model", "") or ""
+    if preserve_requested and requested and _is_valid_model_name(requested):
+        # 保留请求方 model(从全名提取末段·如 deepseek-momo/deepseek-v4-flash → deepseek-v4-flash)
+        payload["model"] = requested.split("/")[-1]
+    else:
+        payload["model"] = chosen_model
     events = []
     # 能力协商: body 中存在的参数但 provider 不支持 → drop + 记录事件
     for param, supported in (("thinking", cap.get("thinking", False)),):
@@ -195,6 +207,12 @@ def _safe_payload(body: dict, chosen_model: str) -> tuple[dict, list]:
                 "model": chosen_model, "param": param,
             })
     return payload, events
+
+
+def _is_valid_model_name(model: str) -> bool:
+    """判断 model 名是否有效(含已知模型名·防把随机字符串当 model)。"""
+    m = (model or "").lower()
+    return any(k in m for k in ("deepseek", "qwen", "glm", "kimi", "gpt", "flash", "pro"))
 
 # 每日成本累计(成本红线)
 _lock = threading.Lock()
@@ -298,6 +316,12 @@ async def chat_completions(request: Request):
 
     chosen_model = sel.model
     chosen_provider = sel.provider
+
+    # 路径3 修复(命中率 P0-1): provider 稳定 = 缓存可命中
+    # 请求方 model 带 provider 前缀(如 deepseek-momo/...) → 用请求方 provider 稳定转发
+    req_provider = model_hint.split("/")[0] if "/" in model_hint else ""
+    if req_provider in PROVIDER_CONFIG and not (agent and AGENT_PROVIDER_BINDING.get(agent) not in (None, "deepseek")):
+        chosen_provider = req_provider
 
     # ③ 转发真实 provider(按 chosen_provider 动态选 base_url + key·白名单过滤+能力协商)
     client = _provider_client(chosen_provider, agent)
