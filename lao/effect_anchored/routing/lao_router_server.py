@@ -24,7 +24,8 @@ lao-router — LAO 成本优化 OpenAI 兼容代理 (方案A·9Agent共用)
     - 成本策略(权重/阈值)= 闭源 Private Policy; 本服务可执行可审计
 """
 from __future__ import annotations
-import json, os, time, logging, threading
+import asyncio, json, os, time, logging, threading, uuid
+from collections import deque
 from typing import Optional, Dict, Any, List
 
 import uvicorn
@@ -36,7 +37,11 @@ from openai import OpenAI
 # LAO 路由核心(已实现·T1成本红线真实生效)
 import sys
 sys.path.insert(0, "/home/agentuser/lao-release")
-from lao.effect_anchored.routing.model_router import ModelRouter, RouteSelection, AGENT_PROVIDER_BINDING
+from lao.effect_anchored.routing.model_router import ModelRouter, RouteSelection
+from lao.effect_anchored.routing.cost_intelligence import SavingsEngine
+# B2(2026-08-16 RIS审计修复): RIS 健康门——LAO 真正消费 ris-bridge/ris_summary,
+# provider 被 RIS 判定 down/isolated 时阻断并降级切换(成本事故链路从"注释"变"阻断")
+from lao.effect_anchored.routing.ris_health_gate import RISHealthGate
 
 # ── 配置 ─────────────────────────────────────────────
 PORT = int(os.environ.get("LAO_ROUTER_PORT", "8765"))
@@ -154,6 +159,94 @@ logger = logging.getLogger("lao-router")
 
 app = FastAPI(title="lao-router", version="1.0.0")
 router = ModelRouter()
+# M6: LAO 节省证据链(SavingsEngine·Dashboard Impact Report 数据源)
+savings_engine = SavingsEngine()
+
+# ── B2: LAO→RIS 反向桥(LAO 路由/降级/成本信号 → lao-signal.json·RIS 消费) ──
+LAO_SIGNAL_FILE = "/home/agentuser/shared/state/lao-signal.json"
+_signal_lock = threading.Lock()
+_signal_window: Dict[str, deque] = {}   # provider → 滚动窗口(最近 50 次转发结果)
+SIGNAL_WINDOW_SIZE = 50
+
+# ── B2/B5: RIS 健康门(LAO 消费 RIS 桥·阻断被隔离/掉线的 provider) ──
+ris_gate = RISHealthGate()
+
+
+def _update_lao_signal(provider: str, ok: bool, cache_hit: int = 0, cache_miss: int = 0,
+                       cost_usd: float = 0.0, degraded: bool = False) -> None:
+    """B2 反向桥写入: 每次转发结算后更新 lao-signal.json(原子写·RIS 每 30s 消费)。
+
+    RIS 消费端(ris.lao_signal.LAOSignalMonitor)用错误率产出 provider 退化事件 →
+    隔离指令回写 ris-bridge → 本服务 ris_gate 阻断 → 双向数据飞轮闭环。
+    """
+    try:
+        with _signal_lock:
+            dq = _signal_window.setdefault(provider, deque(maxlen=SIGNAL_WINDOW_SIZE))
+            dq.append({"ok": bool(ok), "hit": cache_hit, "miss": cache_miss,
+                       "cost": cost_usd, "degraded": degraded, "ts": time.time()})
+            providers = {}
+            for pname, entries in _signal_window.items():
+                n = len(entries)
+                errs = sum(1 for e in entries if not e["ok"])
+                hit = sum(e["hit"] for e in entries)
+                miss = sum(e["miss"] for e in entries)
+                providers[pname] = {
+                    "requests": n, "errors": errs,
+                    "error_rate": round(errs / n, 4) if n else 0.0,
+                    "cache_hit_tokens": hit, "cache_miss_tokens": miss,
+                    "cache_hit_rate": round(hit / (hit + miss), 4) if hit + miss else None,
+                    "cost_usd": round(sum(e["cost"] for e in entries), 6),
+                    "degraded_count": sum(1 for e in entries if e["degraded"]),
+                    "last_ts": entries[-1]["ts"],
+                }
+            signal = {
+                "layer": "lao",
+                "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "window": {"providers": providers},
+                "daily_cost_usd": round(_daily_cost["total_usd"], 6),
+                "budget_usd": DAILY_BUDGET,
+            }
+            os.makedirs(os.path.dirname(LAO_SIGNAL_FILE), exist_ok=True)
+            tmp = LAO_SIGNAL_FILE + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(signal, f, ensure_ascii=False)
+            os.replace(tmp, LAO_SIGNAL_FILE)
+    except Exception as e:
+        logger.warning(f"lao-signal update fail: {e}")
+
+
+def _ris_guard_provider(chosen_provider: str, request_id: str = "") -> tuple:
+    """B2/B5: RIS 健康门——被 RIS 判定 down/isolated 的 provider 真实阻断。
+
+    - 阻断后降级切换到第一个健康且有 key 的 provider(事件留痕 ris_provider_block)
+    - 全部候选被阻断 → (None, ev)·调用方显式 503(禁止静默 fallback)
+    - RIS 桥陈旧/不可读 → fail-open 不阻断(RIS 故障不放大为 LAO 全停)
+    Returns: (provider 或 None, block_event 或 None)
+    """
+    try:
+        snap = ris_gate.read()
+    except Exception:
+        return chosen_provider, None
+    if not snap["fresh"] or not snap["blocked"]:
+        return chosen_provider, None
+    if chosen_provider not in snap["blocked"]:
+        return chosen_provider, None
+    # 降级: 摘除被阻断 provider·按序选健康候选(有 key 才可用)
+    for cand in ("deepseek", "token-plan", "novarouteai"):
+        if cand == chosen_provider:
+            continue
+        cfg = PROVIDER_CONFIG.get(cand)
+        if cfg and cfg.get("api_key") and cand not in snap["blocked"]:
+            ev = {"request_id": request_id, "type": "ris_provider_block",
+                  "blocked": chosen_provider, "fallback": cand,
+                  "reason": "blocked by RIS (down/isolated)", "source": snap["source"]}
+            _log_event(ev)
+            return cand, ev
+    ev = {"request_id": request_id, "type": "ris_provider_block",
+          "blocked": chosen_provider, "fallback": None,
+          "reason": "all candidate providers blocked by RIS", "source": snap["source"]}
+    _log_event(ev)
+    return None, ev
 
 # ── Phase A/B: OpenAI 兼容参数过滤层 + Provider Capability Detection ──
 # 防止未知参数(如 thinking)被直接透传到 OpenAI SDK → 400/TypeError
@@ -180,13 +273,36 @@ def _capability(model: str) -> dict:
     return ProviderCapabilityRegistry["default"]
 
 
-def _safe_payload(body: dict, chosen_model: str, preserve_requested: bool = True) -> tuple[dict, list]:
+# M4: cache hit/miss 价差计费(DeepSeek 官方口径: prompt = hit + miss·hit 价远低于 miss)
+# ¥/1M tokens; miss 档与旧固定单价一致(无缓存时成本不变), hit 档按官方价差折算
+MODEL_PRICING_YUAN = {
+    "deepseek-v4-pro":   {"hit": 0.6, "miss": 3.0, "output": 6.0},
+    "deepseek-v4-flash": {"hit": 0.1, "miss": 1.0, "output": 2.0},
+    "default":           {"hit": 0.6, "miss": 3.0, "output": 6.0},
+}
+CNY_PER_USD = 7.2
+
+
+def _compute_cost_yuan(model: str, cache_hit: int, cache_miss: int, out_tok: int) -> float:
+    """按 cache hit/miss 分价计算一次调用成本(¥)。"""
+    for k in ("deepseek-v4-pro", "deepseek-v4-flash"):
+        if k in model:
+            p = MODEL_PRICING_YUAN[k]
+            break
+    else:
+        p = MODEL_PRICING_YUAN["default"]
+    return (cache_hit * p["hit"] + cache_miss * p["miss"] + out_tok * p["output"]) / 1e6
+
+
+def _safe_payload(body: dict, chosen_model: str) -> tuple[dict, list]:
     """过滤未知参数 + 基于能力的参数协商。
 
-    命中率 99.9% P0-1(智囊团决议 2026-08-15): 缓存键 bug 修复。
-    关键: **保留请求方 model(稳定前缀=缓存命中)**·不再无条件覆盖。
-    - preserve_requested=True(默认): payload["model"]=请求方 model(若有效)
-    - 仅当请求方 model 为空/无效时才用 chosen_model(兜底)
+    C1/M2 修复(QODER 审计 2026-08-16): 转发层**只用 chosen_model**。
+    - 旧逻辑保留 requested_model → route_with_budget 的 pro→flash 成本红线
+      降级被架空(决策 flash·实际按 pro 计费·¥400 事故根因)。
+    - 缓存稳定不再靠转发 model 参数, 而由三层保障:
+      ① provider/api_key 按 agent 固定(C4); ② payload["user"] 按 agent 隔离;
+      ③ _stabilize_messages 稳定前缀。转发 model = 路由决策, 与缓存解耦。
 
     Returns:
         (payload: 仅含支持的参数, fallback_events: CapabilityFallbackEvent 列表)
@@ -196,14 +312,8 @@ def _safe_payload(body: dict, chosen_model: str, preserve_requested: bool = True
     # 命中率数据(Stella派单): stream 时强制 include_usage·否则 chunk 无 usage·cache 字段永远 0
     if payload.get("stream") and "stream_options" not in payload:
         payload["stream_options"] = {"include_usage": True}
-    # 架构红线(固化): 稳定前缀 = 缓存命中
-    # 不再强制 payload["model"]=chosen_model·保留请求方 model 保证前缀稳定
-    requested = body.get("model", "") or ""
-    if preserve_requested and requested and _is_valid_model_name(requested):
-        # 保留请求方 model(从全名提取末段·如 deepseek-momo/deepseek-v4-flash → deepseek-v4-flash)
-        payload["model"] = requested.split("/")[-1]
-    else:
-        payload["model"] = chosen_model
+    # C1: 转发 model 必须等于路由决策(成本红线真实生效)
+    payload["model"] = chosen_model
     # P1 命中率优化(Shuyu派单 2026-08-15): 稳定前缀 + 历史剪枝
     payload["messages"] = _stabilize_messages(payload.get("messages", []))
     events = []
@@ -227,12 +337,6 @@ def _safe_payload(body: dict, chosen_model: str, preserve_requested: bool = True
     if not thinking_enabled:
         _strip_reasoning_content(payload.get("messages", []))
     return payload, events
-
-
-def _is_valid_model_name(model: str) -> bool:
-    """判断 model 名是否有效(含已知模型名·防把随机字符串当 model)。"""
-    m = (model or "").lower()
-    return any(k in m for k in ("deepseek", "qwen", "glm", "kimi", "gpt", "flash", "pro"))
 
 
 # P1 命中率优化(Shuyu派单 2026-08-15): 稳定前缀 + 历史剪枝
@@ -367,8 +471,62 @@ def _record_cost(usd: float):
 
 def _log_event(ev: Dict[str, Any]):
     ev["ts"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    # M3: agent 归因规范化 — 空值统一 unknown(聚合/成本归因不再出现空串)
+    if not ev.get("agent"):
+        ev["agent"] = "unknown"
     with open(EVENT_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(ev, ensure_ascii=False, default=str) + "\n")
+
+
+def _model_quality(model: str, tier: str) -> float:
+    """从 MODEL_POOL 查所选模型质量分(供 SavingsEngine 证据链)。"""
+    for e in router.MODEL_POOL.get(tier, []):
+        if e.get("model") == model:
+            return float(e.get("quality", 0.0))
+    return 0.0
+
+
+def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
+                    chosen_model: str, provider: str, sel: RouteSelection, budget: float,
+                    in_tok: int, out_tok: int, cache_hit: int, cache_miss: int,
+                    stream: bool, latency_ms: int, cap_events: list,
+                    status: str = "ok", error: str = ""):
+    """成本结算 + SavingsEngine + 事件落日志(流式/非流式统一入口)。
+
+    C2: 流式/非流式都经此记账(_record_cost)→ 预算红线覆盖全部流量。
+    M4: cache hit/miss 分价计费。M5: 流式不再硬编码 cost_yuan=0。
+    M6: 每次成功响应产出 CostSavingsEvent。m3: request_id 贯穿。
+    """
+    degraded = "flash" in chosen_model and "pro" in str(model_hint).lower()
+    cost_yuan = _compute_cost_yuan(chosen_model, cache_hit, cache_miss, out_tok)
+    _record_cost(cost_yuan / CNY_PER_USD)
+    baseline_model = (model_hint.split("/")[-1] if model_hint else "") or "deepseek-v4-pro"
+    saving_ev = savings_engine.compute_saving(
+        agent_id=agent or "unknown", task_type=tier,
+        original_model=baseline_model, selected_model=chosen_model,
+        in_tok=in_tok, out_tok=out_tok, cache_hit=cache_hit, cache_miss=cache_miss,
+        quality_score=_model_quality(chosen_model, sel.tier),
+        switch_reason="budget_redline_degrade" if degraded else "tier_match",
+    )
+    _log_event({
+        "request_id": request_id,
+        "tier": tier, "chosen_model": chosen_model, "forwarded_model": chosen_model,
+        "provider": provider,
+        "agent": agent, "requested_model": model_hint, "budget_remaining": round(budget, 4),
+        "degraded": degraded,
+        "input_tokens": in_tok, "output_tokens": out_tok,
+        "cache_hit_tokens": cache_hit, "cache_miss_tokens": cache_miss,
+        "task_type": tier,
+        "cost_yuan": round(cost_yuan, 6), "latency_ms": latency_ms, "stream": stream,
+        "status": status, "error": error or "",
+        "saving_usd": round(saving_ev.saving_amount, 6),
+        "fallback_chain": sel.fallback_chain,
+        "capability_events": cap_events,   # Phase A/B: 参数过滤事件(TrustEvent 链)
+    })
+    # B2 反向桥: 路由/降级/成本/缓存结果 → lao-signal.json(RIS 消费·双向飞轮)
+    _update_lao_signal(provider, ok=(status == "ok"),
+                       cache_hit=cache_hit, cache_miss=cache_miss,
+                       cost_usd=cost_yuan / CNY_PER_USD, degraded=degraded)
 
 
 # ── OpenAI 兼容端点 ──────────────────────────────
@@ -380,9 +538,17 @@ def list_models():
     ]}
 
 
+@app.get("/v1/savings")
+def savings_report():
+    """M6: LAO Impact Report(供 Nova/Stella/Dashboard 消费)。"""
+    return savings_engine.impact_report()
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = await request.json()
+    # m3: request_id 贯穿该请求的全部日志事件(优先透传 x-request-id)
+    request_id = (request.headers.get("x-request-id") or "").strip() or uuid.uuid4().hex[:12]
     messages = body.get("messages", [])
     model_hint = body.get("model", "")
     stream = body.get("stream", False)
@@ -407,11 +573,22 @@ async def chat_completions(request: Request):
     chosen_model = sel.model
     chosen_provider = sel.provider
 
-    # 路径3 修复(命中率 P0-1): provider 稳定 = 缓存可命中
-    # 请求方 model 带 provider 前缀(如 deepseek-momo/...) → 用请求方 provider 稳定转发
+    # C4: provider 绑定与缓存隔离统一 —— agent 一旦识别, provider 固定为其绑定值
+    # (未绑定 agent 默认 deepseek·route() 已过滤池), 不再按请求前缀切换:
+    # provider/api_key 变 = DeepSeek 前缀缓存全失效(miss 价是 hit 价数十倍)。
+    # 仅无 agent 的裸请求尊重 provider 前缀(deepseek/ token-plan/ novarouteai/)。
     req_provider = model_hint.split("/")[0] if "/" in model_hint else ""
-    if req_provider in PROVIDER_CONFIG and not (agent and AGENT_PROVIDER_BINDING.get(agent) not in (None, "deepseek")):
+    if not agent and req_provider in PROVIDER_CONFIG:
         chosen_provider = req_provider
+
+    # B2/B5: RIS 健康门——被 RIS 阻断(down/isolated)的 provider 摘出候选·降级切换;
+    # 全部候选被阻断 → 显式 503(禁止静默 fallback·ProviderHealthGate 哲学)
+    chosen_provider, _block_ev = _ris_guard_provider(chosen_provider, request_id)
+    if chosen_provider is None:
+        return JSONResponse(
+            {"error": {"message": "all upstream providers blocked by RIS isolation",
+                       "type": "lao_router_ris_gate"}},
+            status_code=503)
 
     # ③ 转发真实 provider(按 chosen_provider 动态选 base_url + key·白名单过滤+能力协商)
     client = _provider_client(chosen_provider, agent)
@@ -422,11 +599,18 @@ async def chat_completions(request: Request):
         payload["user"] = f"lao-{agent}"
     started = time.time()
     try:
-        resp = client.chat.completions.create(**payload)
+        # C3: 同步 OpenAI 调用放线程池执行, 不阻塞 uvicorn 事件循环
+        # (旧逻辑直接同步调用 → 首 token 前整个 router 卡死 → 重试风暴放大成本)
+        resp = await asyncio.to_thread(client.chat.completions.create, **payload)
     except Exception as e:
-        _log_event({"tier": tier, "chosen_model": chosen_model, "provider": chosen_provider,
-                    "agent": agent, "budget": budget, "status": "error", "error": str(e)[:200],
-                    "capability_events": cap_events})
+        await asyncio.to_thread(_log_event, {
+            "request_id": request_id,
+            "tier": tier, "chosen_model": chosen_model, "forwarded_model": chosen_model,
+            "provider": chosen_provider,
+            "agent": agent, "budget": budget, "status": "error", "error": str(e)[:200],
+            "capability_events": cap_events})
+        # B2 反向桥: 转发失败也要进滚动窗口(错误率是 RIS 判定退化的核心信号)
+        await asyncio.to_thread(_update_lao_signal, chosen_provider, False)
         return JSONResponse({"error": {"message": str(e), "type": "lao_router_forward"}}, status_code=502)
 
     latency_ms = int((time.time() - started) * 1000)
@@ -438,8 +622,9 @@ async def chat_completions(request: Request):
 
         def _sse_gen():
             nonlocal stream_usage
+            status, err = "ok", ""
             try:
-                for chunk in resp:   # OpenAI Stream 迭代
+                for chunk in resp:   # OpenAI Stream 迭代(Starlette 在线程池中迭代本生成器)
                     # 保留 OpenAI SSE 格式
                     yield "data: " + chunk.model_dump_json() + "\n\n"
                     # 流末尾 chunk 带 usage(含 cache)·提取真实命中率数据
@@ -451,49 +636,38 @@ async def chat_completions(request: Request):
                         stream_usage["miss"] = getattr(cu, "prompt_cache_miss_tokens", 0) or 0
                 yield "data: [DONE]\n\n"
             except Exception as e:
+                status, err = "error", str(e)[:200]
                 logger.error(f"stream error: {e}")
                 yield f"data: {{\"error\":{{\"message\":\"{e}\",\"type\":\"lao_router_stream\"}}}}\n\n"
-            # 台账修复(创始人令)+命中率(Stella派单): 流结束后记录事件日志(agent标识·cache真实值)
-            _log_event({
-                "tier": tier, "chosen_model": chosen_model, "provider": chosen_provider,
-                "agent": agent, "requested_model": model_hint, "budget_remaining": round(budget, 4),
-                "degraded": "flash" in chosen_model and "pro" in str(model_hint).lower(),
-                "input_tokens": stream_usage["input"], "output_tokens": stream_usage["output"], "stream": True,
-                "cache_hit_tokens": stream_usage["hit"], "cache_miss_tokens": stream_usage["miss"], "task_type": tier,
-                "cost_yuan": 0.0, "latency_ms": latency_ms,
-                "fallback_chain": sel.fallback_chain, "capability_events": cap_events,
-            })
-        return StreamingResponse(_sse_gen(), media_type="text/event-stream")
+            finally:
+                # M1/C2/M5: 成功/异常/客户端断开都必经 finally —
+                # 流式成本计入每日预算 + 真实 cost_yuan + 事件日志(含 error·A/B 成功率不再失真)
+                _settle_and_log(
+                    request_id=request_id, tier=tier, agent=agent, model_hint=model_hint,
+                    chosen_model=chosen_model, provider=chosen_provider, sel=sel, budget=budget,
+                    in_tok=stream_usage["input"], out_tok=stream_usage["output"],
+                    cache_hit=stream_usage["hit"], cache_miss=stream_usage["miss"],
+                    stream=True, status=status, error=err,
+                    latency_ms=int((time.time() - started) * 1000), cap_events=cap_events,
+                )
+
         return StreamingResponse(_sse_gen(), media_type="text/event-stream")
 
-    # ④ 成本记录(仅非流式·流式在 chunk 末尾拿 usage)
+    # ④ 成本记录(非流式) + SavingsEngine + 事件日志(与流式共用 _settle_and_log 统一入口)
     usage = getattr(resp, "usage", None)
     in_tok = getattr(usage, "prompt_tokens", 0) if usage else 0
     out_tok = getattr(usage, "completion_tokens", 0) if usage else 0
-    # 命中率 99.9%(Stella/创始人令 2026-08-15): 提取 cache 字段算命中率
+    # 命中率 99.9%(Stella/创始人令 2026-08-15): 提取 cache 字段
     # DeepSeek usage: prompt_cache_hit_tokens(命中) / prompt_cache_miss_tokens(未命中)
     cache_hit = getattr(usage, "prompt_cache_hit_tokens", 0) if usage else 0
     cache_miss = getattr(usage, "prompt_cache_miss_tokens", 0) if usage else 0
-    # 单价(¥/1M): pro 3/6, flash 1/2
-    ci = 3 if "pro" in chosen_model else 1
-    co = 6 if "pro" in chosen_model else 2
-    cost_yuan = (in_tok * ci + out_tok * co) / 1e6
-    cost_usd = cost_yuan / 7.2
-    _record_cost(cost_usd)
-
-    _log_event({
-        "tier": tier, "chosen_model": chosen_model, "provider": chosen_provider,
-        "agent": agent, "requested_model": model_hint, "budget_remaining": round(budget, 4),
-        "degraded": "flash" in chosen_model and "pro" in str(model_hint).lower(),
-        "input_tokens": in_tok, "output_tokens": out_tok,
-        # 命中率数据基础(按 agent×task×时段分析):
-        "cache_hit_tokens": cache_hit,     # prompt_cache_hit_tokens(命中)
-        "cache_miss_tokens": cache_miss,   # prompt_cache_miss_tokens(未命中)
-        "task_type": tier,                 # 任务归类(light/medium/reasoning/...)
-        "cost_yuan": round(cost_yuan, 6), "latency_ms": latency_ms, "stream": stream,
-        "fallback_chain": sel.fallback_chain,
-        "capability_events": cap_events,   # Phase A/B: 参数过滤事件(TrustEvent 链)
-    })
+    await asyncio.to_thread(
+        _settle_and_log,
+        request_id=request_id, tier=tier, agent=agent, model_hint=model_hint,
+        chosen_model=chosen_model, provider=chosen_provider, sel=sel, budget=budget,
+        in_tok=in_tok, out_tok=out_tok, cache_hit=cache_hit, cache_miss=cache_miss,
+        stream=stream, latency_ms=latency_ms, cap_events=cap_events,
+    )
 
     return resp
 

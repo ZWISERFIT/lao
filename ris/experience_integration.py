@@ -84,6 +84,7 @@ def dump_summary():
     events = load_events()
     summary = build_summary(events)
     out_path = os.path.join(OUT_DIR, "ris_summary.json")
+    os.makedirs(OUT_DIR, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=1, default=str)
     print(f"✅ RIS→LAO 数据桥: {len(events)} 事件 → {out_path}")

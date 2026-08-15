@@ -13,6 +13,14 @@ from typing import Callable, Dict, List, Optional
 
 from ris.events import RuntimeHealthEvent
 
+# ── P0-1 Provider 健康监控接入（成熟部署加速·Shuyu 立项）──
+from ris.health.provider_monitor import (  # noqa: E402,F401
+    ProviderHealthMonitor,
+    COST_CHAIN_NOTE,
+    LAO_ROUTER_ENDPOINT,
+    DEEPSEEK_DIRECT_ENDPOINT,
+)
+
 
 class ProcessHealth:
     """进程健康: 检查 gateway/agent 进程是否存活 + PID 是否变化(重启检测)。"""
@@ -29,13 +37,14 @@ class ProcessHealth:
             return RuntimeHealthEvent(
                 event_type="process_down", agent_id=name, status="detected",
                 severity="error", detail={"pid": pid, "alive": False})
-        # PID 变化检测(重启)
-        changed = self._last_pids.get(name) is not None and self._last_pids[name] != pid
+        # PID 变化检测(重启)——先取 old 再更新·否则 old_pid 恒等于 new_pid(审计 B6)
+        old = self._last_pids.get(name)
+        changed = old is not None and old != pid
         self._last_pids[name] = pid or 0
         if changed:
             return RuntimeHealthEvent(
                 event_type="process_restart", agent_id=name, status="detected",
-                severity="warn", detail={"old_pid": self._last_pids.get(name), "new_pid": pid})
+                severity="warn", detail={"old_pid": old, "new_pid": pid})
         return RuntimeHealthEvent(
             event_type="process_ok", agent_id=name, status="recovered",
             severity="info", detail={"pid": pid, "alive": True})

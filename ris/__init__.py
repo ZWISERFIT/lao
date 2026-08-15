@@ -31,12 +31,39 @@ from lao.effect_anchored.recovery_verifier import RecoveryVerification  # noqa: 
 # ── B3. Provider Availability（Provider 可用性）──
 from lao.effect_anchored.provider_health_gate import ProviderHealthGate  # noqa: F401
 from lao.effect_anchored.routing_state_guard import RoutingStateGuard  # noqa: F401
+from ris.provider import ProviderIsolator, ProviderIsolationEvent  # noqa: F401
+from ris.health.provider_monitor import ProviderHealthMonitor  # noqa: F401
+
+# ── B2. LAO→RIS 反向桥消费（2026-08-16 审计修复）──
+from ris.lao_signal import LAOSignalMonitor  # noqa: F401
 
 # ── 第三阶段：RuntimeHealthEvent（RIS 运行健康事件）──
 from ris.events import RuntimeHealthEvent, RIS_EVENT_TYPES  # noqa: F401
 
-# ── RIS→LAO 数据桥（P0-3·成熟部署加速·Shuyu立项）──
+# ── Phase 2：Runtime State Registry（Agent 运行状态台账·Momo 负责）──
+from ris.state import (  # noqa: F401
+    RuntimeStateRegistry,
+    RuntimeStateRecord,
+    FailureRecord,
+    MAX_FAILURE_HISTORY,
+)
+
+# ── Config Drift Guard（配置漂移检测 + 运行时 Watcher·2026-08-16 接线）──
+from ris.config_drift import (  # noqa: F401
+    ConfigDriftGuard,
+    ConfigDriftEvent,
+    ConfigDriftWatcher,
+)
+
+# ── Phase RIS-Enablement: RIS→LAO 数据桥（P0-3·成熟部署加速·Shuyu立项）──
 from ris.bridge import RISToLAOBridge, sync_bridge, BRIDGE_FILE  # noqa: F401
+
+# ── Phase RIS-Enablement：Experience Extraction（恢复经验提取·Momo 负责）──
+from ris.experience import (  # noqa: F401
+    RiskExperienceExtractor,
+    RecoveryExperience,
+    extract_recovery_experience,
+)
 
 __all__ = [
     # Process Health
@@ -49,13 +76,31 @@ __all__ = [
     # Provider Availability
     "ProviderHealthGate",
     "RoutingStateGuard",
+    "ProviderHealthMonitor",
+    "ProviderIsolator",
+    "ProviderIsolationEvent",
+    # LAO→RIS 反向桥消费（B2）
+    "LAOSignalMonitor",
     # Events（第三阶段）
     "RuntimeHealthEvent",
     "RIS_EVENT_TYPES",
+    # Runtime State Registry（Phase 2·台账）
+    "RuntimeStateRegistry",
+    "RuntimeStateRecord",
+    "FailureRecord",
+    "MAX_FAILURE_HISTORY",
+    # Config Drift Guard
+    "ConfigDriftGuard",
+    "ConfigDriftEvent",
+    "ConfigDriftWatcher",
     # RIS→LAO 数据桥（P0-3）
     "RISToLAOBridge",
     "sync_bridge",
     "BRIDGE_FILE",
+    # Experience Extraction（RIS-Enablement·恢复经验提取）
+    "RiskExperienceExtractor",
+    "RecoveryExperience",
+    "extract_recovery_experience",
 ]
 
 __version__ = "1.0.0"

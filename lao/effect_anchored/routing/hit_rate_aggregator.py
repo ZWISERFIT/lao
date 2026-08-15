@@ -42,10 +42,15 @@ def hour_of(ts: str) -> str:
         return ts[:13] + ":00"
 
 
-def aggregate(events: list) -> dict:
-    """按 agent × task_type × 小时 聚合命中率。"""
-    # (agent, task_type, hour) → {hit, miss, count}
-    agg = defaultdict(lambda: {"hit": 0, "miss": 0, "count": 0})
+def aggregate(events: list, min_cache_tokens: int = 200) -> dict:
+    """按 agent × task_type × 小时 聚合命中率。
+
+    P1 监测口径修正(Shuyu派单 2026-08-15):
+    - min_cache_tokens=200: 短请求(cache_hit+miss < 200 tokens·无缓存价值)不算分母
+    - 避免短请求稀释命中率指标(短请求基本无缓存前缀·非真实 miss)
+    """
+    # (agent, task_type, hour) → {hit, miss, count, short_count}
+    agg = defaultdict(lambda: {"hit": 0, "miss": 0, "count": 0, "short": 0})
     for e in events:
         agent = e.get("agent") or "unknown"
         task = e.get("task_type") or e.get("tier") or "unknown"
@@ -53,6 +58,10 @@ def aggregate(events: list) -> dict:
         hit = e.get("cache_hit_tokens") or 0
         miss = e.get("cache_miss_tokens") or 0
         key = (agent, task, hour)
+        # 短请求(无缓存价值)不计入命中率分母·单独统计
+        if hit + miss < min_cache_tokens:
+            agg[key]["short"] += 1
+            continue
         agg[key]["hit"] += hit
         agg[key]["miss"] += miss
         agg[key]["count"] += 1
@@ -66,6 +75,7 @@ def aggregate(events: list) -> dict:
             "agent": agent, "task_type": task, "hour": hour,
             "cache_hit_tokens": v["hit"], "cache_miss_tokens": v["miss"],
             "hit_rate_pct": rate, "requests": v["count"],
+            "short_requests_skipped": v["short"],
         })
     rows.sort(key=lambda r: r["hour"])
     return rows

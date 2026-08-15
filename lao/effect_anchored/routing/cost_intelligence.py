@@ -27,11 +27,12 @@ from typing import Dict, List, Optional
 MODEL_BASELINE_COST = {
     # 若不用 LAO 路由, 默认全用 pro(最贵) → original_cost 基线
     # [V·Nova unit-price-model-v2·官方CSV固定价·20260814]
-    # 真实单价: cache_miss 档(缓存失效=成本暴涨场景·作为基线)·$/1K tokens
-    "deepseek-v4-pro": {"input": 0.003, "output": 0.006},   # $/1K (= $3/$6 per 1M·cache_miss档)
-    "deepseek-v4-flash": {"input": 0.001, "output": 0.002}, # $/1K (= $1/$2 per 1M·cache_miss档)
+    # input = cache miss 档(缓存失效=成本暴涨场景·作为基线)
+    # input_cache_hit = cache hit 档(M4: 官方价差 hit 远低于 miss·pro 1/5·flash 1/10)
+    "deepseek-v4-pro": {"input": 0.003, "output": 0.006, "input_cache_hit": 0.0006},  # $/1K (= $3/$6 per 1M·miss档)
+    "deepseek-v4-flash": {"input": 0.001, "output": 0.002, "input_cache_hit": 0.0001},  # $/1K (= $1/$2 per 1M·miss档)
     # 其他模型按 pro 兜底(未路由=用贵模型)
-    "default": {"input": 0.003, "output": 0.006},
+    "default": {"input": 0.003, "output": 0.006, "input_cache_hit": 0.0006},
 }
 
 
@@ -79,26 +80,43 @@ class SavingsEngine:
 
     # -- 成本计算 --
     @staticmethod
-    def model_cost(model: str, in_tok: int, out_tok: int) -> float:
-        """计算一次调用的 $ 成本。"""
+    def model_cost(model: str, in_tok: int, out_tok: int,
+                   cache_hit: int = 0, cache_miss: Optional[int] = None) -> float:
+        """计算一次调用的 $ 成本。
+
+        M4: 区分 cache hit/miss 价差(DeepSeek 官方: prompt = hit + miss·hit 价远低于 miss)。
+        - 缺省(cache_hit=0, cache_miss=None): 全部按 miss 档 = 旧行为(基线口径)。
+        - 传 cache_hit(+可选 cache_miss): hit 部分按 hit 档折扣。
+        """
         key = "default"
         for m in ("deepseek-v4-pro", "deepseek-v4-flash"):
             if m in model:
                 key = m
                 break
         p = MODEL_BASELINE_COST.get(key, MODEL_BASELINE_COST["default"])
-        return (in_tok * p["input"] + out_tok * p["output"]) / 1000.0
+        if cache_miss is None:
+            cache_miss = max(0, in_tok - cache_hit)
+        hit_cost = min(cache_hit, in_tok) * p["input_cache_hit"]
+        miss_cost = cache_miss * p["input"]
+        return (hit_cost + miss_cost + out_tok * p["output"]) / 1000.0
 
     # -- 核心: 计算节省 --
     def compute_saving(self, agent_id: str, task_type: str,
                        original_model: str, selected_model: str,
                        in_tok: int, out_tok: int,
                        quality_score: float = 0.0,
-                       switch_reason: str = "") -> CostSavingsEvent:
-        """同一请求: 不开 LAO(original_model) vs 开 LAO(selected_model) 成本对比。"""
+                       switch_reason: str = "",
+                       cache_hit: int = 0,
+                       cache_miss: Optional[int] = None) -> CostSavingsEvent:
+        """同一请求: 不开 LAO(original_model) vs 开 LAO(selected_model) 成本对比。
+
+        基线 original_cost 全按 miss 档(不开 LAO = 不做前缀治理·保守口径);
+        optimized_cost 按真实缓存状态计(M4 价差)。
+        """
         self._counter += 1
         orig_cost = self.model_cost(original_model, in_tok, out_tok)
-        opt_cost = self.model_cost(selected_model, in_tok, out_tok)
+        opt_cost = self.model_cost(selected_model, in_tok, out_tok,
+                                   cache_hit=cache_hit, cache_miss=cache_miss)
         saving = max(0.0, orig_cost - opt_cost)
         ratio = (saving / orig_cost) if orig_cost > 0 else 0.0
         ev = CostSavingsEvent(

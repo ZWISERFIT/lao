@@ -136,6 +136,9 @@ class RISToLAOBridge:
     def build(self, events: Optional[List[Dict]] = None) -> Dict:
         events = events if events is not None else self.load_events()
         agg = self.aggregate(events)
+        summary = agg["summary"]
+        # B5: 隔离指令进桥(LAO 消费 → 真实摘除被熔断的 provider)
+        summary["isolated_providers"] = self._isolated_providers()
         return {
             "layer": "ris",
             "schema_version": SCHEMA_VERSION,
@@ -144,10 +147,19 @@ class RISToLAOBridge:
                 "since": events[0]["ts"] if events else "",
                 "events_total": len(events),
             },
-            "summary": agg["summary"],
+            "summary": summary,
             "recent_events": events[-self.max_recent:],
             "active_alerts": agg["active_alerts"],
         }
+
+    @staticmethod
+    def _isolated_providers() -> List[str]:
+        """当前活跃隔离(来自 ProviderIsolator 状态文件·读失败不阻塞桥)。"""
+        try:
+            from ris.provider import ProviderIsolator
+            return sorted(ProviderIsolator().active().keys())
+        except Exception:
+            return []
 
     # ── 落盘(原子写) ───────────────────────────────────────
     def sync(self, events: Optional[List[Dict]] = None) -> Dict:
@@ -162,8 +174,11 @@ class RISToLAOBridge:
 
 
 def sync_bridge() -> Dict:
-    """便捷入口: 立即同步一次 RIS → 共享 JSON。"""
-    return RISToLAOBridge().sync()
+    """便捷入口: 立即同步一次 RIS → 共享 JSON。
+
+    路径经模块属性运行时解析(测试可重定向到临时目录·不写生产共享态)。
+    """
+    return RISToLAOBridge(bridge_file=BRIDGE_FILE, source_log=_RIS_LOG).sync()
 
 
 __all__ = ["RISToLAOBridge", "sync_bridge", "BRIDGE_FILE",

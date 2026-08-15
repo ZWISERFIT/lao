@@ -1,0 +1,31 @@
+{
+ "created_at": "2026-08-15T18:57:52.746840+00:00",
+ "snapshot": {
+  "lao-router-unit": {
+   "exists": true,
+   "sha256": "e3d400ca7c79366c",
+   "owner": "agentuser"
+  },
+  "ris-monitor-unit": {
+   "exists": true,
+   "sha256": "d30b78ff81fb79c7",
+   "owner": "agentuser"
+  },
+  "openclaw-gateway-unit": {
+   "exists": true,
+   "sha256": "aada0c148e1ed76f",
+   "owner": "agentuser"
+  },
+  "openclaw-secrets": {
+   "exists": true,
+   "sha256": "7b4dfa94f171e4eb"
+  },
+  "lao-router-env": {
+   "values": {
+    "LAO_ROUTER_PORT": "",
+    "LAO_DAILY_BUDGET_USD": "",
+    "DEEPSEEK_BASE_URL": ""
+   }
+  }
+ }
+}
