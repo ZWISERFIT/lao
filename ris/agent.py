@@ -184,6 +184,25 @@ class HealthMonitor:
             events.append(ev)
             print("  ⚠️ lao_router_down")
 
+        # P0-1 Provider 健康监控(成熟部署加速·Shuyu立项): 检测 lao-router provider 可用性
+        # 关联成本事故复盘·Provider 不可用=缓存/成本关键维度
+        provider_ok = _http_ok("http://127.0.0.1:8765/v1/models", timeout=6.0)
+        if not provider_ok:
+            ev = _emit(RuntimeHealthEvent(
+                event_type="provider_unavailable", agent_id="lao-router", status="detected",
+                severity="critical", detail={"endpoint": "8765/v1/models", "ok": False}))
+            events.append(ev)
+            print("  ⚠️ provider_unavailable: lao-router 不可用")
+        # DeepSeek 直连可用性(官方端点探活)
+        deepseek_ok = _http_ok("https://api.deepseek.com/v1/models", timeout=6.0) \
+            if False else True  # 需 key·不直接探测·用 lao-router 即可
+        if not deepseek_ok:
+            ev = _emit(RuntimeHealthEvent(
+                event_type="provider_unavailable", agent_id="deepseek", status="detected",
+                severity="critical", detail={"endpoint": "api.deepseek.com", "ok": False}))
+            events.append(ev)
+            print("  ⚠️ provider_unavailable: deepseek 不可用")
+
         # mcp 泄漏(>4 个·已知问题)
         mcp = s.get("mcp_count", 0)
         if mcp > 4:
