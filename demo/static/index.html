@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Effect-Anchored Ontology — Interactive Demo</title>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --card: #14141f;
+  --border: #252540;
+  --accent: #ff4444;
+  --accent2: #002B5C;
+  --text: #e0e0e0;
+  --text2: #888;
+  --green: #2ecc71;
+  --yellow: #f1c40f;
+  --red: #e74c3c;
+  --code-bg: #0d0d1a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+header {
+  text-align: center;
+  padding: 40px 20px 30px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 30px;
+}
+header h1 {
+  font-size: 2.2em;
+  background: linear-gradient(135deg, var(--accent), #ff6666);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+header .subtitle { color: var(--text2); font-size: 1.1em; margin-top: 8px; }
+header .badge {
+  display: inline-block;
+  background: var(--accent2);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  margin-top: 12px;
+  font-family: monospace;
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.card-header .icon {
+  font-size: 1.4em;
+}
+.card-header h3 { font-size: 1.1em; font-weight: 600; }
+.card-header .tag {
+  margin-left: auto;
+  font-size: 0.75em;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+.tag.deterministic { background: #1a3a1a; color: var(--green); }
+.tag.probabilistic { background: #3a2a1a; color: var(--yellow); }
+.tag.meta { background: #1a1a3a; color: #6ca0ff; }
+.card-body { padding: 20px; }
+.card-body p { margin-bottom: 12px; color: var(--text2); font-size: 0.95em; }
+.code-block {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.85em;
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+.code-block pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.input-group { display: flex; gap: 8px; margin-bottom: 12px; }
+.input-group input, .input-group textarea {
+  flex: 1;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  color: var(--text);
+  font-family: monospace;
+  font-size: 0.9em;
+  resize: vertical;
+}
+.input-group textarea { min-height: 60px; }
+.btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btn:hover { opacity: 0.85; }
+.btn.secondary { background: var(--border); }
+.result {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 0.85em;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.result.pass { border-color: var(--green); }
+.result.fail { border-color: var(--red); }
+.result.warn { border-color: var(--yellow); }
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+.status-dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-dot.off { background: var(--red); }
+.label {
+  display: inline-block;
+  font-size: 0.75em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.label.pass { background: #1a3a1a; color: var(--green); }
+.label.fail { background: #3a1a1a; color: var(--red); }
+.trust-bar {
+  height: 20px;
+  background: var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+.trust-bar-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 0.4s, background 0.4s;
+}
+.profile-card {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+  font-size: 0.85em;
+}
+.profile-card .provider { font-weight: 700; color: var(--accent); }
+.profile-card .stats { color: var(--text2); margin-top: 4px; }
+.event-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85em;
+}
+.event-row .evt-id { color: var(--accent); font-family: monospace; min-width: 80px; }
+.event-row .evt-speaker { color: var(--yellow); min-width: 80px; }
+.event-row .evt-type { color: var(--text2); min-width: 80px; }
+.event-row .evt-subject { flex: 1; }
+footer {
+  text-align: center;
+  padding: 30px;
+  color: var(--text2);
+  font-size: 0.85em;
+  border-top: 1px solid var(--border);
+  margin-top: 30px;
+}
+@media (max-width: 600px) {
+  .grid { grid-template-columns: 1fr; }
+  header h1 { font-size: 1.6em; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Effect-Anchored Ontology Engine</h1>
+    <div class="subtitle">Interactive Demo — v0.1.0-alpha</div>
+    <div class="badge">pip install effect-anchored-ontology</div>
+  </header>
+
+  <div class="grid" id="app">
+    <!-- H: Hallucination Gate -->
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">🛡️</span>
+        <h3>H — Hallucination Gate</h3>
+        <span class="tag deterministic">deterministic</span>
+      </div>
+      <div class="card-body">
+        <p>Validates LLM output against schema, fact, and rule constraints — all outside the LLM's probability space.</p>
+        <div class="code-block"><pre>gate = HallucinationGate(
+  constraints_path="rules/medical.json",
+  anchors_path="facts/db.json"
+)
+result = gate.check(llm_output, context)</pre></div>
+        <div class="input-group">
+          <input type="text" id="h-output" value="Let's do some squats to strengthen your legs" placeholder="LLM output to validate...">
+        </div>
+        <div class="input-group">
+          <input type="text" id="h-context" value="I have knee pain" placeholder="User context (e.g., user message)...">
+        </div>
+        <button class="btn" onclick="checkGate()">▶ Run Hallucination Gate</button>
+        <div class="result" id="h-result" style="display:none;margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- M: Memory Anchor -->
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">⚓</span>
+        <h3>M — Memory Anchor</h3>
+        <span class="tag deterministic">deterministic</span>
+      </div>
+      <div class="card-body">
+        <p>Deterministic key-value retrieval. No semantic search, no probabilistic fallback — exact match or honest "I don't know".</p>
+        <div class="code-block"><pre>mem = MemoryAnchor(anchor_db_path="facts/db.json")
+result = mem.lookup("founder_first_store_location")
+# → MResult(found=True, value="东莞市万江街道")</pre></div>
+        <div class="input-group">
+          <select id="m-key" style="flex:1;background:var(--code-bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:monospace;font-size:0.9em;">
+            <option value="">🔍 Select or type a key...</option>
+          </select>
+          <input type="text" id="m-key-custom" style="display:none;flex:1;" placeholder="Custom key...">
+        </div>
+        <button class="btn" onclick="lookupAnchor()">🔍 Lookup</button>
+        <div class="result" id="m-result" style="display:none;margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- C: Context Rebuilder -->
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">🔗</span>
+        <h3>C — Context Rebuilder</h3>
+        <span class="tag deterministic">deterministic</span>
+      </div>
+      <div class="card-body">
+        <p>Record structured events with content hashes. After session compaction, rebuild the full event chain.</p>
+        <div class="code-block"><pre>recon = ContextRebuilder(session_id="demo")
+recon.record(Event(
+  event_id="evt_1", speaker="founder",
+  event_type="decision", subject="Strategy",
+  summary="...", content_hash="abc123"
+))</pre></div>
+        <div class="input-group">
+          <input type="text" id="c-speaker" value="founder" placeholder="Speaker (founder/tristan/...)" style="min-width:100px;">
+          <input type="text" id="c-type" value="decision" placeholder="Type" style="min-width:100px;">
+          <input type="text" id="c-subject" value="Demo event" placeholder="Subject" style="flex:2;">
+        </div>
+        <div class="input-group">
+          <textarea id="c-summary" placeholder="Event summary...">Testing the Context Rebuilder in the interactive demo</textarea>
+        </div>
+        <button class="btn" onclick="recordEvent()">📝 Record Event</button>
+        <button class="btn secondary" onclick="showEvents()" style="margin-left:8px;">📋 Show Events</button>
+        <div class="result" id="c-result" style="display:none;margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- E: Effect Anchoring -->
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">📊</span>
+        <h3>E — Effect Anchoring</h3>
+        <span class="tag deterministic">deterministic</span>
+      </div>
+      <div class="card-body">
+        <p>Trust scoring from observed effects. "DeepSeek claims streaming works" → "We observed 5 successes, 1 timeout over 6 trials".</p>
+        <div class="code-block"><pre>effect = EffectAnchoring(min_observations=3)
+effect.record(CapabilityObservation(
+  capability="streaming", provider="deepseek",
+  model="v4-pro", success=True, latency_ms=3200
+))</pre></div>
+        <div class="input-group">
+          <input type="text" id="e-provider" value="deepseek" placeholder="Provider" style="min-width:100px;">
+          <input type="text" id="e-model" value="v4-pro" placeholder="Model" style="min-width:100px;">
+          <input type="text" id="e-capability" value="streaming" placeholder="Capability" style="min-width:100px;">
+        </div>
+        <div class="input-group">
+          <input type="number" id="e-latency" value="3200" placeholder="Latency (ms)" style="min-width:100px;">
+          <select id="e-success" style="background:var(--code-bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-family:monospace;">
+            <option value="true">✅ Success</option>
+            <option value="false">❌ Failure</option>
+          </select>
+          <input type="text" id="e-error" value="" placeholder="Error type (if failed)" style="min-width:100px;">
+        </div>
+        <button class="btn" onclick="recordEffect()">📈 Record Observation</button>
+        <button class="btn secondary" onclick="showProfiles()" style="margin-left:8px;">📊 Show Profiles</button>
+        <div class="result" id="e-result" style="display:none;margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- A: Adaptive Constraint -->
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">🧬</span>
+        <h3>A — Adaptive Constraint</h3>
+        <span class="tag probabilistic">LLM-assisted</span>
+      </div>
+      <div class="card-body">
+        <p>One violation → equivalence class → rule → all future violations blocked. Compound interest on errors.</p>
+        <div class="code-block"><pre>adaptive = AdaptiveConstraint()
+v = Violation(
+  violation_id="v_001", layer="fact",
+  description="Agent suggested squats for knee pain"
+)
+rule = adaptive.derive(v)</pre></div>
+        <div class="input-group">
+          <textarea id="a-description" placeholder="Violation description...">Agent gave exercise advice for a medical symptom without routing to human first</textarea>
+        </div>
+        <div class="input-group">
+          <input type="text" id="a-anchors" value="knee_pain→squat, medical→unsupervised" placeholder="Anchors violated (comma-separated)">
+        </div>
+        <button class="btn" onclick="deriveRule()">🧬 Derive Rule</button>
+        <div class="result" id="a-result" style="display:none;margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <!-- S: Self Audit -->
+    <div class="card">
+      <div class="card-header">
+        <span class="icon">🔍</span>
+        <h3>S — Self Audit</h3>
+        <span class="tag meta">meta-audit</span>
+      </div>
+      <div class="card-body">
+        <p>Meta-audit of the rule system. H checks agent output against rules. S checks if the rules themselves are correct.</p>
+        <div class="code-block"><pre>audit = SelfAudit(staleness_days=30)
+report = audit.audit(
+  rules=rules, rule_stats=stats,
+  violation_patterns=gaps
+)</pre></div>
+        <button class="btn" onclick="runAudit()">🔍 Run Self Audit</button>
+        <div class="result" id="s-result" style="display:none;margin-top:12px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <p><strong>Effect-Anchored Ontology Engine</strong> — Six libraries. Three lines each. Built from 120 days of 9-agent autonomous operation.</p>
+    <p style="margin-top:6px;"><a href="https://github.com/ZWISERFIT/effect-anchored-ontology" style="color:var(--accent);">GitHub</a> · Apache 2.0 · v0.1.0-alpha</p>
+  </footer>
+</div>
+
+<script>
+// Auto-detect API base from current page URL
+const API = (() => {
+  const p = window.location.pathname;
+  // Remove trailing filename, get directory
+  const dir = p.substring(0, p.lastIndexOf('/'));
+  return dir; // e.g., /share/eao-demo or /eao-demo
+})();
+function api(path, method='GET', body=null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  return fetch(API + path, opts).then(r => r.json());
+}
+
+// === H: Hallucination Gate ===
+async function checkGate() {
+  const output = document.getElementById('h-output').value;
+  const ctxMsg = document.getElementById('h-context').value;
+  const result = await api('/api/gate/check', 'POST', {
+    output, context: { user_message: ctxMsg }
+  });
+  const el = document.getElementById('h-result');
+  el.style.display = 'block';
+  el.className = 'result ' + (result.passed ? 'pass' : 'fail');
+  el.innerHTML = `<span class="label ${result.passed?'pass':'fail'}">${result.gate_result.toUpperCase()}</span>
+  <strong>passed:</strong> ${result.passed}
+  <strong>reason:</strong> ${result.reason || 'N/A'}
+  <strong>violated:</strong> ${JSON.stringify(result.anchors_violated)}`;
+}
+
+// === M: Memory Anchor ===
+async function loadAnchorKeys() {
+  const data = await api('/api/anchor/keys');
+  const sel = document.getElementById('m-key');
+  data.keys.forEach(k => {
+    const opt = document.createElement('option');
+    opt.value = k; opt.textContent = k;
+    sel.appendChild(opt);
+  });
+}
+loadAnchorKeys();
+
+async function lookupAnchor() {
+  const key = document.getElementById('m-key').value;
+  if (!key) return;
+  const data = await api('/api/anchor/lookup?key=' + encodeURIComponent(key));
+  const el = document.getElementById('m-result');
+  el.style.display = 'block';
+  el.className = 'result ' + (data.found ? 'pass' : 'warn');
+  if (data.found) {
+    el.innerHTML = `<span class="label pass">FOUND</span>
+    <strong>key:</strong> ${data.anchor_id}
+    <strong>value:</strong> ${JSON.stringify(data.value)}`;
+  } else {
+    el.innerHTML = `<span class="label fail">NOT FOUND</span>
+    <strong>key:</strong> "${key}" → honest "I don't know" (no probabilistic fallback)`;
+  }
+}
+
+// === C: Context Rebuilder ===
+const events = [];
+async function recordEvent() {
+  const evt = {
+    event_id: 'evt_' + Date.now(),
+    timestamp: new Date().toISOString(),
+    speaker: document.getElementById('c-speaker').value,
+    event_type: document.getElementById('c-type').value,
+    subject: document.getElementById('c-subject').value,
+    summary: document.getElementById('c-summary').value,
+    content_hash: '',
+    parent_events: events.length > 0 ? [events[events.length-1].event_id] : [],
+  };
+  events.push(evt);
+  const data = await api('/api/rebuilder/record', 'POST', evt);
+  const el = document.getElementById('c-result');
+  el.style.display = 'block';
+  el.className = 'result pass';
+  el.innerHTML = `<span class="label pass">RECORDED</span>
+  <strong>event_id:</strong> ${evt.event_id}
+  <strong>chain:</strong> ${data.total} events
+  <strong>parent:</strong> ${evt.parent_events.length > 0 ? evt.parent_events[0] : 'none'}`;
+}
+
+function showEvents() {
+  const el = document.getElementById('c-result');
+  el.style.display = 'block';
+  el.className = 'result pass';
+  if (events.length === 0) {
+    el.innerHTML = '<em>No events recorded yet. Record one first!</em>';
+    return;
+  }
+  el.innerHTML = events.map(e => `
+    <div class="event-row">
+      <span class="evt-id">${e.event_id}</span>
+      <span class="evt-speaker">${e.speaker}</span>
+      <span class="evt-type">${e.event_type}</span>
+      <span class="evt-subject">${e.subject}</span>
+    </div>
+  `).join('');
+}
+
+// === E: Effect Anchoring ===
+async function recordEffect() {
+  const data = await api('/api/effect/record', 'POST', {
+    capability: document.getElementById('e-capability').value,
+    provider: document.getElementById('e-provider').value,
+    model: document.getElementById('e-model').value,
+    success: document.getElementById('e-success').value === 'true',
+    latency_ms: parseInt(document.getElementById('e-latency').value) || null,
+    error_type: document.getElementById('e-error').value || null,
+  });
+  const el = document.getElementById('e-result');
+  el.style.display = 'block';
+  const trustColor = data.trust_score > 0.7 ? '#2ecc71' : data.trust_score > 0.3 ? '#f1c40f' : '#e74c3c';
+  el.className = 'result ' + (data.successes > data.failures ? 'pass' : 'fail');
+  el.innerHTML = `<span class="label ${data.successes>data.failures?'pass':'fail'}">${data.provider}/${data.model}/${data.capability}</span>
+  <strong>trust:</strong> <span style="color:${trustColor};font-weight:700;">${data.trust_score.toFixed(4)}</span>
+  <strong>obs:</strong> ${data.total_observations}
+  <strong>succ/fail:</strong> ${data.successes}/${data.failures}
+  <strong>mean latency:</strong> ${data.mean_latency_ms.toFixed(0)}ms`;
+}
+
+async function showProfiles() {
+  const data = await api('/api/effect/profiles');
+  const el = document.getElementById('e-result');
+  el.style.display = 'block';
+  el.className = 'result pass';
+  if (!data.profiles || data.profiles.length === 0) {
+    el.innerHTML = '<em>No profiles yet. Record some observations first!</em>';
+    return;
+  }
+  el.innerHTML = '<div style="margin-bottom:12px;font-weight:700;">📊 Provider Capability Profiles</div>' +
+    data.profiles.map(p => {
+      const pct = Math.round(p.trust_score * 100);
+      const color = pct > 70 ? 'var(--green)' : pct > 30 ? 'var(--yellow)' : 'var(--red)';
+      return `<div class="profile-card">
+        <div class="provider">${p.provider} / ${p.model}</div>
+        <div class="stats">${p.capability} · ${p.total_observations} obs · ${p.successes}✅ ${p.failures}❌ · ${p.mean_latency_ms.toFixed(0)}ms mean</div>
+        <div class="trust-bar">
+          <div class="trust-bar-fill" style="width:${pct}%;background:${color};"></div>
+        </div>
+        <div style="font-size:0.8em;color:var(--text2);">trust: ${p.trust_score.toFixed(4)}</div>
+      </div>`;
+    }).join('');
+}
+
+// === A: Adaptive Constraint ===
+async function deriveRule() {
+  const desc = document.getElementById('a-description').value;
+  const anchors = document.getElementById('a-anchors').value.split(',').map(s => s.trim()).filter(Boolean);
+  const data = await api('/api/adaptive/derive', 'POST', {
+    violation_id: 'v_demo_' + Date.now(),
+    layer: 'fact',
+    description: desc,
+    llm_output_snippet: desc.substring(0, 100),
+    anchors_violated: anchors,
+  });
+  const el = document.getElementById('a-result');
+  el.style.display = 'block';
+  el.className = 'result pass';
+  const rule = data.derived_rule;
+  el.innerHTML = `<span class="label pass">RULE DERIVED</span>
+  <strong>rule_id:</strong> ${rule.rule_id}
+  <strong>class:</strong> ${rule.equivalence_class}
+  <strong>pattern:</strong> ${rule.rule_pattern}
+  <strong>confidence:</strong> ${rule.confidence.toFixed(2)}
+  <strong>action:</strong> ${rule.rule_action}
+  <br><br><em>Exported for H-function enforcement. Compound interest on errors.</em>`;
+}
+
+// === S: Self Audit ===
+async function runAudit() {
+  const data = await api('/api/audit/run', 'POST', {});
+  const el = document.getElementById('s-result');
+  el.style.display = 'block';
+  const statusColor = data.overall_status === 'pass' ? 'var(--green)' : data.overall_status === 'warning' ? 'var(--yellow)' : 'var(--red)';
+  el.className = 'result ' + (data.overall_status === 'pass' ? 'pass' : data.overall_status === 'fail' ? 'fail' : 'warn');
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+    <span class="status-dot" style="background:${statusColor};"></span>
+    <strong>Status:</strong> ${data.overall_status.toUpperCase()}
+    <strong>Health Score:</strong> ${(data.metrics.health_score*100).toFixed(1)}%
+  </div>
+  <strong>Metrics:</strong> ${JSON.stringify(data.metrics)}
+  <br><br><strong>Findings (${data.findings.length}):</strong>
+  ${data.findings.map(f => `
+    <div style="margin:4px 0;padding:4px 8px;border-left:3px solid ${f.severity==='critical'?'var(--red)':'var(--yellow)'};">
+      [${f.severity.toUpperCase()}] ${f.category}: ${f.description}
+      ${f.recommendation ? '<br><em>→ ' + f.recommendation + '</em>' : ''}
+    </div>
+  `).join('')}`;
+}
+</script>
+</body>
+</html>

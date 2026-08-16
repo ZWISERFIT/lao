@@ -122,6 +122,14 @@ ZWISERFIT 9-Agent Collective 全栈跑在自己的 LAO 上——每个 Agent 的
 
 ---
 
+## 仓库合并说明（2026-08-17）
+
+本仓库（`ZWISERFIT/lao`）是 LAO 的**唯一官方仓库**。原 `ZWISERFIT/lineage-anchored-ontology` 仓库（行为记忆层/谱系锚定本体）已于 2026-08-17 整体并入本仓库：其核心代码（`effect_anchored/`）、测试、demo 与示例资产均已合入，原仓库仅保留指路说明并归档。PyPI 正式包为 `lao-human-calibration`；原 alpha 包 `lineage-anchored-ontology` 已标记 deprecated 指向本包。
+
+历史 import 路径迁移：`from effect_anchored import ...` → `from lao.effect_anchored import ...`。
+
+---
+
 ## Documentation
 
 详见 `docs/` 与各模块 docstring。

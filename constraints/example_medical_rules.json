@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "medical_advice_router": {
+      "type": "pattern_match",
+      "pattern": "knee_pain|back_pain|shoulder_pain|injury|hurt|ache|swollen|numb",
+      "reason": "Any medical symptom mention → route to human trainer, not AI advice",
+      "scope": "agent"
+    },
+    "streaming_batch_separation": {
+      "type": "capability_anchor",
+      "providers": ["deepseek", "qwen"],
+      "reason": "Streaming and batch must have separate timeout profiles per provider. Richard's Discussion #35 validated this empirically.",
+      "scope": "system"
+    }
+  }
+}

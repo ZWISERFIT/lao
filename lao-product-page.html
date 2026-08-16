@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LAO · Lineage-Anchored Ontology · ZWISERFIT</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0a0a0f; color: #e0e0e0; line-height: 1.7; }
+  .hero { background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%); padding: 80px 20px 60px; text-align: center; border-bottom: 1px solid #30363d; }
+  .hero h1 { font-size: 2.6em; font-weight: 800; background: linear-gradient(90deg, #58a6ff, #bc8cff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 12px; }
+  .hero .subtitle { font-size: 1.2em; color: #8b949e; max-width: 700px; margin: 0 auto 24px; }
+  .hero .tagline { font-size: 1.35em; color: #c9d1d9; font-weight: 500; margin-bottom: 32px; }
+  .hero code { background: #1c2128; padding: 10px 20px; border-radius: 8px; font-size: 1.1em; color: #7ee787; border: 1px solid #30363d; display: inline-block; }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 20px; }
+  h2 { font-size: 1.8em; font-weight: 700; color: #58a6ff; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1.2em; font-weight: 600; color: #c9d1d9; margin: 24px 0 8px; }
+  .arch-diagram { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; margin: 20px 0; font-family: 'Courier New', monospace; font-size: 0.92em; line-height: 1.8; white-space: pre; overflow-x: auto; }
+  .arch-diagram .l1 { color: #ffa657; }
+  .arch-diagram .l2 { color: #7ee787; }
+  .arch-diagram .l3 { color: #a5d6ff; }
+  .arch-diagram .l4 { color: #d2a8ff; }
+  .arch-diagram .l5 { color: #ff7b72; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th { background: #161b22; color: #58a6ff; font-weight: 600; text-align: left; padding: 10px 14px; border-bottom: 2px solid #30363d; }
+  td { padding: 10px 14px; border-bottom: 1px solid #21262d; }
+  tr:hover td { background: #161b22; }
+  .code-block { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin: 16px 0; overflow-x: auto; }
+  .code-block pre { font-family: 'Courier New', monospace; font-size: 0.9em; color: #c9d1d9; }
+  .code-block .keyword { color: #ff7b72; }
+  .code-block .string { color: #a5d6ff; }
+  .code-block .comment { color: #8b949e; }
+  .code-block .func { color: #d2a8ff; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.8em; font-weight: 600; margin: 2px; }
+  .badge-green { background: #1a472a; color: #7ee787; }
+  .badge-blue { background: #1a2e47; color: #58a6ff; }
+  .badge-purple { background: #2a1a47; color: #d2a8ff; }
+  .steps { display: flex; gap: 16px; margin: 24px 0; flex-wrap: wrap; }
+  .step-card { flex: 1; min-width: 200px; background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; }
+  .step-card .step-num { font-size: 2em; font-weight: 800; color: #30363d; }
+  .step-card h4 { color: #58a6ff; margin: 8px 0; }
+  .step-card p { color: #8b949e; font-size: 0.9em; }
+  .cta { text-align: center; padding: 48px 20px; background: linear-gradient(135deg, #0d1117, #161b22); border-top: 1px solid #30363d; }
+  .cta h2 { border: none; margin-bottom: 8px; }
+  .cta code { display: block; max-width: 500px; margin: 16px auto; }
+  .footer { text-align: center; padding: 32px; color: #484f58; font-size: 0.85em; }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .compare-table td:first-child { font-weight: 600; color: #ffa657; }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <h1>Lineage-Anchored Ontology</h1>
+  <p class="tagline">AI认知层基础设施。从LLM的概率推理到LAO的确定性校验。</p>
+  <p class="subtitle">六个开源Python库。三行代码接入。每一个Agent的错误都自动变成代码，永远不再犯。</p>
+  <code>pip install lineage-anchored-ontology</code>
+  <p style="margin-top:16px;">
+    <span class="badge badge-green">Apache 2.0</span>
+    <span class="badge badge-blue">Python ≥3.9</span>
+    <span class="badge badge-purple">59 tests · 0 failed</span>
+    <span class="badge badge-green">v0.1.0-alpha</span>
+  </p>
+</section>
+
+<div class="container">
+
+<h2>🏗️ 五层架构</h2>
+
+<div class="arch-diagram">┌──────────────────────────────────────────────────────────┐
+│ <span class="l5">L5 三层认知架构</span>    懂你 → 懂业务 → 懂经营                 │
+│ <span class="l4">L4 交互确认层</span>      认知冲突·自动处理 | 推送用户确认            │
+│ <span class="l3">L3 经验复利闭环</span>    错误→筛选→生成约束代码→永久免疫            │
+│ <span class="l2">L2 六函数引擎</span>      H幻觉门·M记忆锚·C上下文·A自适应·E效果·S自审计  │
+│ <span class="l1">L1 路由决策层</span>      31模型自主选择·功耗感知·任务难度→模型分层      │
+└──────────────────────────────────────────────────────────┘</div>
+
+<h2>⚡ 快速开始</h2>
+
+<div class="code-block"><pre><span class="comment"># 1. 安装</span>
+pip install lineage-anchored-ontology
+
+<span class="comment"># 2. 使用幻觉门——模型不会再说"门店在深圳"</span>
+<span class="keyword">from</span> effect_anchored <span class="keyword">import</span> <span class="func">HallucinationGate</span>, <span class="func">MemoryAnchor</span>
+
+gate = <span class="func">HallucinationGate</span>()
+result = gate.check(<span class="string">"门店在深圳"</span>, context={<span class="string">"anchors"</span>: [<span class="string">"store_location"</span>]})
+<span class="keyword">print</span>(f<span class="string">"幻觉拦截: {not result.passed}"</span>)  <span class="comment"># ✅ True</span>
+
+<span class="comment"># 3. 确定性记忆——不猜，直接查</span>
+anchor = <span class="func">MemoryAnchor</span>()
+anchor.put(<span class="string">"store_location"</span>, <span class="string">"东莞市万江街道"</span>)
+<span class="keyword">print</span>(anchor.get(<span class="string">"store_location"</span>))  <span class="comment"># "东莞市万江街道"</span></pre></div>
+
+<h2>🧬 六函数</h2>
+
+<table>
+<tr><th>函数</th><th>职能</th><th>一句话</th></tr>
+<tr><td><strong>H</strong> HallucinationGate</td><td>幻觉拦截</td><td>"你说门店在深圳？拦截。"</td></tr>
+<tr><td><strong>M</strong> MemoryAnchor</td><td>确定性记忆</td><td>不猜，直接查。</td></tr>
+<tr><td><strong>C</strong> ContextRebuilder</td><td>上下文重建</td><td>还原Agent当时看到了什么。</td></tr>
+<tr><td><strong>A</strong> AdaptiveConstraint</td><td>自适应约束</td><td>每犯一次错，生成一条Python规则。</td></tr>
+<tr><td><strong>E</strong> EffectAnchoring</td><td>效果锚定</td><td>Agent说的效果 vs 实际验证。</td></tr>
+<tr><td><strong>S</strong> SelfAudit</td><td>自审计</td><td>系统审计自己的规则。</td></tr>
+</table>
+
+<h2>🔄 经验复利闭环（核心壁垒）</h2>
+
+<div class="arch-diagram">Agent犯错误 → H函数拦截
+                ↓
+    经验萃取器识别错误模式
+                ↓
+    约束生成器生成Python代码
+                ↓
+    规则注册器写入永久约束
+                ↓
+    下次同样错误 → 自动拦截 · 不再犯</div>
+
+<p style="color: #8b949e; margin: 16px 0;">用了3个月的Agent vs 刚装的Agent → <strong style="color: #d2a8ff;">质的差距</strong>。迁移成本 = 失去所有自动积累的约束谱系。</p>
+
+<h2>📊 与其他方案对比</h2>
+
+<table class="compare-table">
+<tr><th></th><th>NVIDIA Guardrails</th><th>LangChain Memory</th><th style="color:#7ee787;">LAO</th></tr>
+<tr><td>规则来源</td><td>人类预设</td><td>人类预设</td><td style="color:#7ee787;"><strong>Agent自身错误自动生成</strong></td></tr>
+<tr><td>幻觉处理</td><td>内容过滤</td><td>无</td><td style="color:#7ee787;"><strong>确定性外部校验</strong></td></tr>
+<tr><td>记忆</td><td>无</td><td>语义搜索(概率)</td><td style="color:#7ee787;"><strong>确定性key-value</strong></td></tr>
+<tr><td>自进化</td><td>无</td><td>无</td><td style="color:#7ee787;"><strong>错误→自动生成约束代码</strong></td></tr>
+<tr><td>经验复利</td><td>无</td><td>无</td><td style="color:#7ee787;"><strong>每犯一次错，系统更强</strong></td></tr>
+</table>
+
+<h2>🚀 三步走路线图</h2>
+
+<div class="steps">
+  <div class="step-card">
+    <div class="step-num">1</div>
+    <h4>开发者工具（现在）</h4>
+    <p>pip install · 解决幻觉+记忆 · Apache 2.0开源 · 开发者用了推荐给另一个</p>
+  </div>
+  <div class="step-card">
+    <div class="step-num">2</div>
+    <h4>经验复利引擎</h4>
+    <p>Agent错误自动变代码 · 3个月 vs 刚装 → 质的差距 · "换框架？又要犯120天的错"</p>
+  </div>
+  <div class="step-card">
+    <div class="step-num">3</div>
+    <h4>认知层基础设施</h4>
+    <p>不是我们宣称 · 是开发者用了回不去 → 被市场定义为标准校验层 · 就像pip</p>
+  </div>
+</div>
+
+<h2>🧪 测试</h2>
+
+<div class="code-block"><pre>git clone https://github.com/ZWISERFIT/lineage-anchored-ontology
+cd lineage-anchored-ontology
+pip install -e ".[dev]"
+pytest tests/ -v
+
+<span class="comment"># 59 tests · 全部通过 · 0 failed · 0.23s</span></pre></div>
+
+<h2>🏢 关于ZWISERFIT</h2>
+<p style="color: #8b949e;">LAO是<strong>ZWISERFIT</strong>的第一个对外开源产品——面向线下实体门店的全栈AI自治平台。ZWISERFIT是9套垂直Agent微型OS构成的AI操作系统级公司。</p>
+<p style="color: #8b949e; margin-top: 8px;">创始人莫淑瑜 · 保险内行×健身布道者×产品架构师×AI系统创建者 · 东莞万江7年深耕 · 9-Agent 24×7自主运行。</p>
+<p style="color: #8b949e; margin-top: 8px;">主打YC #15 「AI Operating System for Companies」——这是我们的第一个开源模块。</p>
+
+<h2>📄 License</h2>
+<p>Apache 2.0 — 开源，商业友好。</p>
+
+</div>
+
+<div class="cta">
+  <h2>聪明是通用的。懂你是专用的。</h2>
+  <code>pip install lineage-anchored-ontology</code>
+  <p style="margin-top:20px;">
+    <a href="https://github.com/ZWISERFIT/lineage-anchored-ontology">GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="https://pypi.org/project/lineage-anchored-ontology/">PyPI</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/ZWISERFIT">ZWISERFIT</a>
+  </p>
+</div>
+
+<div class="footer">
+  ZWISERFIT 9-Agent Collective · 2026 · Apache 2.0<br>
+  LLM让AI知道世界。LAO让AI知道你。
+</div>
+
+</body>
+</html>
