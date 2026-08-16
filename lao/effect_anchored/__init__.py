@@ -54,6 +54,14 @@ __all__ = [
     "PreferenceFirewall",
     "FirewallResult",
     "ExperienceAtom",
+    # 三层Loop闭环 (2026-08-16 创始人令)
+    "ExperienceLoop",
+    "FeedbackBus",
+    "FeedbackEvent",
+    "ErrorImmunity",
+    "ExperienceContract",
+    "ExperienceContractRegistry",
+    "ErgeWriter",
 ]
 from .hallucination_gate import HallucinationGate, HInterceptEvent, HResult, GateResult
 from .memory_anchor import MemoryAnchor, MResult
@@ -72,6 +80,12 @@ from .preference_firewall import PreferenceFirewall, FirewallResult, FirewallVer
 # L4 Interaction Layer
 from .interaction import InteractionGate, ConfirmationResult
 from .interaction import CLIBackend, SDKBackend, APIBackend
+
+# 三层Loop闭环 (2026-08-16 创始人令): L1命中率↔L2经验工厂↔L3确权交易
+from .feedback_bus import FeedbackBus, FeedbackEvent, ErrorImmunity
+from .experience_contract import ExperienceContract, ExperienceContractRegistry
+from .erge_writer import ErgeWriter
+from .experience_loop import ExperienceLoop
 
 
 def _version_telemetry() -> dict:

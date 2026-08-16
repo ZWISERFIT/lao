@@ -50,11 +50,51 @@ class ExperienceAsset:
 
 
 class ExperienceAssetRegistry:
-    """ExperienceAsset 注册表(内存 + 可持久化)。"""
+    """ExperienceAsset 注册表(内存 + 可持久化)。
 
-    def __init__(self):
+    2026-08-16 修复(L3确权): 原实现纯内存无 store_path — 资产"上链"进程
+    即失。传入 store_path 后 JSON 持久化(不传=内存·兼容旧行为)。
+    """
+
+    def __init__(self, store_path: Optional[str] = None):
         self._assets: Dict[str, ExperienceAsset] = {}
         self._counter = 0
+        self._path = store_path
+        if store_path:
+            self._load()
+
+    def _load(self) -> None:
+        import json as _json
+        import os
+        if not (self._path and os.path.exists(self._path)):
+            return
+        try:
+            with open(self._path, "r", encoding="utf-8") as f:
+                raw = _json.load(f)
+            for d in raw.get("assets", []):
+                a = ExperienceAsset(**d)
+                self._assets[a.asset_id] = a
+            self._counter = int(raw.get("counter", len(self._assets)))
+        except (OSError, _json.JSONDecodeError, TypeError):
+            pass
+
+    def _save(self) -> None:
+        import json as _json
+        import os
+        if not self._path:
+            return
+        try:
+            d = os.path.dirname(self._path)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            tmp = self._path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                _json.dump({"counter": self._counter,
+                            "assets": [a.to_dict() for a in self._assets.values()]},
+                           f, ensure_ascii=False)
+            os.replace(tmp, self._path)
+        except OSError:
+            pass
 
     def create(self, creator_did: str, problem: str, solution: str,
                domain: str = "", verification_pct: float = 0.0,
@@ -71,6 +111,7 @@ class ExperienceAssetRegistry:
             created_ts=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         )
         self._assets[asset.asset_id] = asset
+        self._save()
         return asset
 
     def get(self, asset_id: str) -> Optional[ExperienceAsset]:

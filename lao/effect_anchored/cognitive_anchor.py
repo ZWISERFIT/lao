@@ -75,6 +75,14 @@ class DecisionAnchor(Anchor):
 # 认知锚点存储
 # ---------------------------------------------------------------------------
 
+# 缓存空间收敛(2026-08-16 创始人令·L2): 有限空间记住更多更全
+# - MAX_ANCHORS: 锚点总数上限, 超限按 (trust_weight, updated) 淘汰最弱最旧
+# - Tier0 永固锚点(trust_weight >= 0.8)永不淘汰
+# - MAX_HISTORY: 单锚点版本历史封顶, 只保留最近 N 版(旧版裁剪)
+MAX_ANCHORS = 500
+MAX_HISTORY = 5
+
+
 class CognitiveAnchorStore:
     """
     三层认知锚点存储（Fact / Decision / Cognitive）。
@@ -92,9 +100,12 @@ class CognitiveAnchorStore:
                   —— 这决定了 "为什么这么做"，不是 "说过什么"。
     """
 
-    def __init__(self, store_path: Optional[str] = None):
+    def __init__(self, store_path: Optional[str] = None,
+                 max_anchors: int = MAX_ANCHORS, max_history: int = MAX_HISTORY):
         self._anchors: Dict[str, Dict[str, Any]] = {}
         self._path = store_path
+        self._max_anchors = max(1, int(max_anchors))
+        self._max_history = max(1, int(max_history))
         if store_path:
             self._load()
 
@@ -114,8 +125,9 @@ class CognitiveAnchorStore:
                 "updated": datetime.now(timezone.utc).isoformat(),
             }
         else:
-            # 保留旧版本到 history（不覆盖破坏）
+            # 保留旧版本到 history（不覆盖破坏·封顶 max_history 只留最近N版）
             entry["history"].append(entry["current"])
+            entry["history"] = entry["history"][-self._max_history:]
             cur = anchor.to_dict()
             # step2: 自动递增版本号
             prev_v = int((entry["current"].get("version") or 1))
@@ -123,9 +135,30 @@ class CognitiveAnchorStore:
             entry["current"] = cur
             entry["hash"] = h
             entry["updated"] = datetime.now(timezone.utc).isoformat()
+        self._evict_if_needed()
         if self._path:
             self._save()
         return h
+
+    def _evict_if_needed(self) -> None:
+        """缓存空间收敛: 超 max_anchors 时淘汰最弱最旧的非 Tier0 锚点。
+
+        淘汰序 = (trust_weight 升序, updated 升序) — 低信任+久未更新的先出局;
+        trust_weight >= 0.8(Tier0 永固)与刚写入的锚点不出局。
+        """
+        if len(self._anchors) <= self._max_anchors:
+            return
+        def _rank(item):
+            anchor_id, entry = item
+            cur = entry.get("current", {})
+            tw = float(cur.get("trust_weight", 0) or 0)
+            if tw >= 0.8:      # Tier0 永固: 排到最后(实际不会被淘汰)
+                tw += 100.0
+            return (tw, entry.get("updated", ""))
+        victims = sorted(self._anchors.items(), key=_rank)
+        overflow = len(self._anchors) - self._max_anchors
+        for anchor_id, _ in victims[:overflow]:
+            del self._anchors[anchor_id]
 
     def update_trigger_weight(self, anchor_id: str, delta: float) -> Optional[Dict[str, Any]]:
         """step2: 每次修正触发时更新该锚点的 trigger 权重(阻尼收敛)。
@@ -239,6 +272,21 @@ class CognitiveAnchorStore:
         if not entry:
             return None
         return entry["hash"] == content_hash
+
+    def stats(self) -> Dict[str, Any]:
+        """容量/分层统计(缓存空间收敛可观测)。"""
+        by_type: Dict[str, int] = {}
+        tier0 = 0
+        history_len = 0
+        for entry in self._anchors.values():
+            cur = entry.get("current", {})
+            by_type[cur.get("anchor_type", "?")] = by_type.get(cur.get("anchor_type", "?"), 0) + 1
+            if float(cur.get("trust_weight", 0) or 0) >= 0.8:
+                tier0 += 1
+            history_len += len(entry.get("history", []))
+        return {"total": len(self._anchors), "by_type": by_type, "tier0": tier0,
+                "history_versions": history_len,
+                "max_anchors": self._max_anchors, "max_history": self._max_history}
 
     # -- 持久化 ------------------------------------------------------------
 

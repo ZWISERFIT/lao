@@ -74,6 +74,9 @@ class ErgeWriter:
 
         conn = self._conn()
         try:
+            # 版本号读取须在 upsert 之前(新锚点=1·已存在=旧version+1)
+            prev_row = conn.execute(
+                "SELECT version FROM anchors WHERE id = ?", (anchor_id,)).fetchone()
             cur = conn.execute(
                 """INSERT INTO anchors
                    (id, category, status, owner, scope, trust_weight, impact_level,
@@ -99,9 +102,12 @@ class ErgeWriter:
                  anchor_type),
             )
             # 版本快照 (versions 表)
+            # 修复(2026-08-16): 旧实现 `cur.lastrowid and 1 or 1` 恒写 version=1,
+            # versions 表版本永不递增(版本追溯失效)。改为真实递增。
+            next_version = (prev_row["version"] + 1) if prev_row and prev_row["version"] else 1
             conn.execute(
                 "INSERT INTO versions (anchor_id, version, snapshot, created_by) VALUES (?,?,?,?)",
-                (anchor_id, cur.lastrowid and 1 or 1, json.dumps(anchor, ensure_ascii=False), agent),
+                (anchor_id, next_version, json.dumps(anchor, ensure_ascii=False), agent),
             )
             # 事件 (events 表): created
             conn.execute(

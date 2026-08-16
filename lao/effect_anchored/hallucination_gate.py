@@ -91,16 +91,20 @@ class HallucinationGate:
         self,
         constraints_path: Optional[str] = None,
         anchors_path: Optional[str] = None,
+        violation_log_path: Optional[str] = None,
     ):
         """
         Args:
             constraints_path: Path to JSON file with schema/rules/domain constraints.
             anchors_path: Path to JSON file with hard-coded fact anchors.
+            violation_log_path: 违规日志 JSONL 落盘路径(可选·2026-08-16:
+                原违规日志只在内存且无 getter — A函数/审计无法消费·现在持久化)。
         """
         self._constraints = self._load_json(constraints_path) if constraints_path else {}
         self._anchors = self._load_json(anchors_path) if anchors_path else {}
         self._violation_log: List[Dict[str, Any]] = []
         self._unrecognized_rule_types: set = set()  # P0 FIX: track unknown rule types for Stella auditing
+        self._violation_log_path = violation_log_path
 
     def check(
         self,
@@ -177,11 +181,31 @@ class HallucinationGate:
         Confidence model:
             PASS → 1.0
             FAIL → 0.99 (schema checks are binary — extremely high confidence)
+
+        2026-08-16 修复(减少幻觉): 原实现 jsonschema.validate 被注释成桩
+        (任何 dict 直接 PASS·schema 门形同虚设) — 恢复真实校验:
+        - jsonschema 可用 → 真实结构校验(缺字段/类型错/枚举越界 → FAIL)
+        - 不可用 → 退化为字符串 JSON 可解析判定(原行为·不阻塞)
         """
         try:
             if isinstance(output, str):
                 output = json.loads(output)
-            # jsonschema.validate(output, schema)  # MVP implementation
+            try:
+                import jsonschema
+            except ImportError:
+                jsonschema = None
+            if jsonschema is not None and schema:
+                try:
+                    jsonschema.validate(output, schema)
+                except jsonschema.ValidationError as ve:
+                    return HResult(
+                        passed=False,
+                        gate_result=GateResult.FAIL,
+                        reason=f"Schema validation failed: {ve.message}",
+                        evidence={"output_preview": str(output)[:200],
+                                  "schema_path": list(ve.absolute_path)},
+                        confidence=0.99,
+                    )
             return HResult(passed=True, gate_result=GateResult.PASS, confidence=1.0)
         except Exception as e:
             return HResult(
@@ -407,11 +431,28 @@ class HallucinationGate:
 
     def _log_violation(self, layer: str, result: HResult) -> None:
         """Log violation for A-function processing and RetroOnto tracing."""
-        self._violation_log.append({
+        from datetime import datetime, timezone
+        entry = {
             "layer": layer,
             "result": result.to_dict(),
-            "timestamp": None,  # inject timestamp at call site
-        })
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        self._violation_log.append(entry)
+        # 持久化(2026-08-16): 违规记录不再写死胡同·A函数/审计可离线消费
+        if self._violation_log_path:
+            try:
+                import os
+                d = os.path.dirname(self._violation_log_path)
+                if d:
+                    os.makedirs(d, exist_ok=True)
+                with open(self._violation_log_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+            except OSError:
+                pass
+
+    def violations(self) -> List[Dict[str, Any]]:
+        """违规日志读取接口(2026-08-16: 原 _violation_log 无任何 getter)。"""
+        return list(self._violation_log)
 
     def get_unrecognized_rules(self) -> List[str]:
         """

@@ -263,7 +263,12 @@ class CognitiveSystem:
     # -- L1 检索得分 --------------------------------------------------------
 
     def _l1_score(self, query: str) -> float:
-        """L1 实时迭代得分: 冲突/约束与 query 的相关(0-1)。"""
+        """L1 实时迭代得分: 冲突/约束/经验复利权重与 query 的相关(0-1)。
+
+        2026-08-16 修复(经验复利闭环): on_success 累积的 _weights 原先写入后
+        无人读取(复利进黑洞) — 现计入得分: query 与 anchor_id 相关且权重>0
+        → 按 min(1, w) 贡献得分(复利越多, 该锚点相关查询得分越高)。
+        """
         q = query.lower()
         score = 0.0
         n = 0
@@ -274,6 +279,11 @@ class CognitiveSystem:
         for sig in self._temporary_constraints:
             if q in sig.lower():
                 score += 1.0
+            n += 1
+        for anchor_id, w in self._weights.items():
+            aid = anchor_id.lower()
+            if w > 0 and (q in aid or (aid and aid in q)):
+                score += min(1.0, w)
             n += 1
         if n == 0:
             return 0.0

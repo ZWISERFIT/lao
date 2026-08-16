@@ -45,6 +45,11 @@ class MResult:
         }
 
 
+# 缓存空间收敛(2026-08-16 创始人令·L2): 锚点总量与单键历史封顶
+MAX_KEYS = 2000        # 键总数上限, 超限淘汰最久未更新
+MAX_HISTORY = 3        # 单键保留的旧版本数(immutable history·只留最近N版)
+
+
 class MemoryAnchor:
     """
     M-Function: Deterministic fact retrieval.
@@ -67,13 +72,18 @@ class MemoryAnchor:
         Values are immutable — updates create new versions with hash verification.
     """
 
-    def __init__(self, anchor_db_path: Optional[str] = None):
+    def __init__(self, anchor_db_path: Optional[str] = None,
+                 max_keys: int = MAX_KEYS, max_history: int = MAX_HISTORY):
         """
         Args:
             anchor_db_path: Path to JSON file with anchor key-value pairs.
+            max_keys: 键数量上限(缓存空间收敛·超限淘汰最久未更新)。
+            max_history: 单键保留旧版本数(0=不保留)。
         """
         self._anchors: Dict[str, Dict[str, Any]] = {}
         self._path = anchor_db_path
+        self._max_keys = max(1, int(max_keys))
+        self._max_history = max(0, int(max_history))
         if anchor_db_path:
             self._load()
 
@@ -125,17 +135,45 @@ class MemoryAnchor:
         content_hash = hashlib.sha256(serialized.encode()).hexdigest()
 
         from datetime import datetime, timezone as _tz
+        # 不可变历史(2026-08-16 修复: 文档承诺 versioned·旧实现原地覆盖丢历史):
+        # 旧值进 history 列表(封顶 max_history), 当前值照常覆盖。
+        prev = self._anchors.get(key)
+        if prev is not None and self._max_history > 0:
+            history = ([*prev.get("history", []), {"value": prev.get("value"),
+                                                   "hash": prev.get("hash"),
+                                                   "updated": prev.get("updated")}])
+            history = history[-self._max_history:]
+        else:
+            history = prev.get("history", []) if prev else []
         self._anchors[key] = {
             "value": value,
             "hash": content_hash,
             "updated": datetime.now(_tz.utc).isoformat(),  # P1#6 FIX: set utcnow
             "source": source,
+            "history": history,
         }
+        self._evict_if_needed()
 
         if self._path:
             self._save()
 
         return content_hash
+
+    def history(self, key: str) -> List[Dict[str, Any]]:
+        """取某键的旧版本列表(最近在后)。不存在返回空。"""
+        entry = self._anchors.get(key)
+        if not entry:
+            return []
+        return list(entry.get("history", []))
+
+    def _evict_if_needed(self) -> None:
+        """缓存空间收敛: 超 max_keys 淘汰最久未更新的键。"""
+        if len(self._anchors) <= self._max_keys:
+            return
+        overflow = len(self._anchors) - self._max_keys
+        for k, _ in sorted(self._anchors.items(),
+                           key=lambda kv: kv[1].get("updated", ""))[:overflow]:
+            del self._anchors[k]
 
     def verify(self, key: str) -> Optional[bool]:
         """

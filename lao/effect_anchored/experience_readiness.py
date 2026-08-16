@@ -125,20 +125,26 @@ class ExperienceReadinessTracker:
         """批量评估, 返回全部结果(调用方据此挑 ready 的推送③)。"""
         return [self.check_experience(e) for e in experiences]
 
-    def ready_batch(self, experiences: List[Dict[str, Any]]) -> List[ReadinessResult]:
+    def ready_batch(self, experiences: List[Dict[str, Any]],
+                    enforce_consent: bool = True) -> List[ReadinessResult]:
         """只返回 ready 的经验(量达标→推送③授权)。
 
-        Raises:
-            PermissionError: 未授权「③上传+④交易」时抛错(P1-4·Factory→③④)。
+        修复(2026-08-16 语义倒置): 原实现先查③④授权、未授权直接抛
+        PermissionError — 用户连"本地算量达没达标"都会被抛错, 与 docstring
+        "只做量是否达标判定"矛盾。现改为:
+        - 量判定始终本地执行(全本地·不联网·默认返回结果不抛错)
+        - enforce_consent=True 时(默认·保持旧安全语义): 量达标且要推送③
+          之前才检查③④授权, 未授权抛 PermissionError(阻止推送·不阻止计算)
+        - enforce_consent=False: 纯量判定(本地自检/报表用)
         """
-        # P1-4 集成接线: Factory 生产 → ③上传+④交易授权
+        ready = [r for r in self.evaluate_batch(experiences) if r.ready]
+        if not ready or not enforce_consent:
+            return ready
+        # P1-4 集成接线: 量达标 → 推送③上传+④交易授权前检查
         from lao.effect_anchored.consent_gate import FourStageConsent
         from lao.effect_anchored.consent_integration import guard_factory
         _consent = self._consent or FourStageConsent()
         _ok, _why = guard_factory(_consent, self._consent_owner)
-        if not _ok and self._consent is None:
-            # 默认内部consent: upload/trade 非默认授权 → 需用户显式
-            raise PermissionError(f"[ready_batch] {_why}")
         if not _ok:
             raise PermissionError(f"[ready_batch] {_why}")
-        return [r for r in self.evaluate_batch(experiences) if r.ready]
+        return ready
