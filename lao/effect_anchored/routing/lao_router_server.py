@@ -25,6 +25,7 @@ lao-router — LAO 成本优化 OpenAI 兼容代理 (方案A·9Agent共用)
 """
 from __future__ import annotations
 import asyncio, json, os, time, logging, threading, uuid
+from datetime import datetime as _dt, timezone as _tzone, timedelta as _tdelta
 from collections import deque
 from typing import Optional, Dict, Any, List
 
@@ -171,6 +172,166 @@ SIGNAL_WINDOW_SIZE = 50
 # ── B2/B5: RIS 健康门(LAO 消费 RIS 桥·阻断被隔离/掉线的 provider) ──
 ris_gate = RISHealthGate()
 
+# ── 三层Loop(2026-08-16 创始人令): L2经验工厂→L3确权→反哺L1 命中率/免疫 ──
+# ExperienceLoop 持久化锚点库+反馈总线+确权链, route 结果回流(错误复利),
+# 确权经验约束反哺 route()。任何初始化失败不阻塞路由(fail-open)。
+try:
+    from lao.effect_anchored.experience_loop import ExperienceLoop
+    LOOP = ExperienceLoop()
+    LOOP.attach_router(router)
+    # Loop④(2026-08-16): 启动即反哺 RIS 恢复经验(成功→锚点/免疫·失败→错误复利)
+    try:
+        _ris_fb = LOOP.ingest_ris_recovery()
+        logger.info(f"ExperienceLoop RIS 反哺: {_ris_fb}")
+    except Exception as _e:
+        logger.warning(f"ExperienceLoop RIS 反哺失败: {_e}")
+except Exception as _loop_e:  # pragma: no cover - 环境缺件时路由照常
+    LOOP = None
+    logger.warning(f"ExperienceLoop 未启用: {_loop_e}")
+
+
+def _loop_record(provider: str, model: str, ok: bool, error: str = "") -> None:
+    """路由结果回流 FeedbackBus(L1→L2/L3·错误复利/经验复利)。失败不阻塞。"""
+    if LOOP is None:
+        return
+    try:
+        LOOP.record_route_result(provider, model, ok, error)
+    except Exception as e:
+        logger.warning(f"loop record fail: {e}")
+
+
+# ── 会话粘性(2026-08-16 L1命中率·最有效手段): 同一会话粘住同 provider+model ──
+# DeepSeek KVCache 按前缀匹配: 同会话每轮换 model/provider = 每轮全量 miss。
+# 会话指纹 = 首条 system/首条 user 消息前缀哈希(跨轮稳定), 粘性表持久化+TTL+LRU。
+STICKY_FILE = os.path.join(LOG_DIR, "lao-session-sticky.json")
+STICKY_MAX_ENTRIES = 500
+STICKY_TTL_SEC = 6 * 3600
+_sticky_lock = threading.Lock()
+_sticky_cache: Dict[str, Dict] = {}
+
+
+def _sticky_load() -> Dict[str, Dict]:
+    if _sticky_cache:
+        return _sticky_cache
+    try:
+        with open(STICKY_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            _sticky_cache.update(data)
+    except Exception:
+        pass
+    return _sticky_cache
+
+
+def _sticky_save_locked() -> None:
+    try:
+        # LRU 收敛: 只保留最近 STICKY_MAX_ENTRIES 条(按 ts)
+        items = sorted(_sticky_cache.items(), key=lambda kv: kv[1].get("ts", 0))
+        for k, _ in items[:-STICKY_MAX_ENTRIES]:
+            _sticky_cache.pop(k, None)
+        tmp = STICKY_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(_sticky_cache, f, ensure_ascii=False)
+        os.replace(tmp, STICKY_FILE)
+    except Exception as e:
+        logger.warning(f"sticky save fail: {e}")
+
+
+def _session_fingerprint(messages: List[Dict]) -> str:
+    """会话指纹: 首条 system + 首条 user 消息前 512 字符的 sha1(跨轮稳定)。"""
+    import hashlib as _hl
+    parts = []
+    for want in ("system", "user"):
+        for m in messages:
+            if isinstance(m, dict) and m.get("role") == want:
+                c = m.get("content", "")
+                if not isinstance(c, str):
+                    c = json.dumps(c, ensure_ascii=False, default=str)
+                parts.append(c[:512])
+                break
+    raw = "\x1f".join(parts)
+    return _hl.sha1(raw.encode("utf-8", "ignore")).hexdigest()[:16]
+
+
+def _sticky_get(session_fp: str) -> Optional[Dict]:
+    if not session_fp:
+        return None
+    with _sticky_lock:
+        entry = _sticky_load().get(session_fp)
+    if not entry or time.time() - entry.get("ts", 0) > STICKY_TTL_SEC:
+        return None
+    return entry
+
+
+def _sticky_put(session_fp: str, provider: str, model: str, agent: str) -> None:
+    if not session_fp:
+        return
+    with _sticky_lock:
+        _sticky_load()[session_fp] = {
+            "provider": provider, "model": model,
+            "agent": agent or "unknown", "ts": time.time(),
+        }
+        _sticky_save_locked()
+
+
+def _sticky_usable(entry: Dict, tier: str, agent: str, cur_provider: str) -> bool:
+    """粘性条目是否可用: provider 有 key + agent 归属一致 + 质量不破底线。"""
+    p = entry.get("provider", "")
+    cfg = PROVIDER_CONFIG.get(p)
+    if not cfg or not cfg.get("api_key"):
+        return False
+    if (entry.get("agent") or "unknown") != (agent or "unknown"):
+        return False  # 跨 agent 复用 = key/前缀隔离被破坏
+    if agent and p != cur_provider:
+        return False  # agent 绑定 provider 优先于粘性
+    # 质量底线: 粘性 model 必须过该 tier 的 SAFETY_GATE
+    gate = router.SAFETY_GATE.get(tier, 0.50)
+    for e in router.MODEL_POOL.get(tier, []):
+        if e.get("model") == entry.get("model"):
+            return float(e.get("quality", 0)) >= gate
+    return False
+
+
+# ── 命中率反馈进路由(2026-08-16 L1): 实测 cache_hit_rate 低的 provider 让位 ──
+HITRATE_MIN_SAMPLES = 10
+HITRATE_LOW_BAR = 0.60
+HITRATE_SWAP_GAP = 0.15
+
+
+def _provider_cache_hit_rate(provider: str) -> Optional[float]:
+    """滚动窗口内 provider 的实测缓存命中率(无样本=None)。"""
+    with _signal_lock:
+        dq = _signal_window.get(provider)
+        if not dq or len(dq) < HITRATE_MIN_SAMPLES:
+            return None
+        hit = sum(e["hit"] for e in dq)
+        miss = sum(e["miss"] for e in dq)
+    return round(hit / (hit + miss), 4) if hit + miss else None
+
+
+def _prefer_hitrate_provider(sel: RouteSelection) -> RouteSelection:
+    """实测命中率反馈: 首选 provider 命中率显著低且 fallback 有明显更优者 → 切换。
+
+    只在无会话粘性时生效(粘性优先); 切换是收敛的: 高命中 provider 持续胜出。
+    """
+    cur_rate = _provider_cache_hit_rate(sel.provider)
+    if cur_rate is not None and cur_rate >= HITRATE_LOW_BAR:
+        return sel
+    for fc in sel.fallback_chain:
+        try:
+            prov, model = fc.split("/", 1)
+        except ValueError:
+            continue
+        cand_rate = _provider_cache_hit_rate(prov)
+        if cand_rate is None:
+            continue
+        if cand_rate - (cur_rate if cur_rate is not None else 0.0) >= HITRATE_SWAP_GAP:
+            sel.provider, sel.model = prov, model
+            _log_event({"type": "hitrate_feedback_switch", "from": cur_rate,
+                        "to": cand_rate, "provider": prov, "model": model})
+            break
+    return sel
+
 
 def _update_lao_signal(provider: str, ok: bool, cache_hit: int = 0, cache_miss: int = 0,
                        cost_usd: float = 0.0, degraded: bool = False) -> None:
@@ -275,23 +436,61 @@ def _capability(model: str) -> dict:
 
 # M4: cache hit/miss 价差计费(DeepSeek 官方口径: prompt = hit + miss·hit 价远低于 miss)
 # ¥/1M tokens; miss 档与旧固定单价一致(无缓存时成本不变), hit 档按官方价差折算
+# ⚠️ LEGACY 价表: 仅 PEAK_VALLEY_EFFECTIVE(20260817) 之前的事件使用(7.2汇率口径)
 MODEL_PRICING_YUAN = {
     "deepseek-v4-pro":   {"hit": 0.6, "miss": 3.0, "output": 6.0},
     "deepseek-v4-flash": {"hit": 0.1, "miss": 1.0, "output": 2.0},
     "default":           {"hit": 0.6, "miss": 3.0, "output": 6.0},
 }
-CNY_PER_USD = 7.2
+CNY_PER_USD = 7.2  # legacy 汇率(20260817前事件); 峰谷口径用 FX_USD_CNY=7.1
+
+# ── 峰谷计价(2026-08-17 00:00 CST 生效 · DeepSeek官方价 · Nova规格/Stella v2.1 ground truth) ──
+# 官方USD价(per 1M tokens): 峰=UTC 01-04+06-10(=CST 09-12+14-18), 其余为谷
+PEAK_VALLEY_EFFECTIVE = "20260817"  # 生效日(含)起用新价·按CST日期切换
+FX_USD_CNY = 7.1  # 与Stella token-cost-model v2.1对齐(官方账单CSV到账后复核)
+PEAK_VALLEY_PRICES_USD = {
+    "deepseek-v4-flash": {"peak":   {"hit": 0.014, "miss": 0.44, "out": 1.32},
+                          "valley": {"hit": 0.007, "miss": 0.22, "out": 0.66}},
+    "deepseek-v4-pro":   {"peak":   {"hit": 0.044, "miss": 1.32, "out": 3.96},
+                          "valley": {"hit": 0.022, "miss": 0.66, "out": 1.98}},
+}
+_CST = _tzone(_tdelta(hours=8))
 
 
-def _compute_cost_yuan(model: str, cache_hit: int, cache_miss: int, out_tok: int) -> float:
-    """按 cache hit/miss 分价计算一次调用成本(¥)。"""
+def _pricing_now() -> tuple:
+    """当前时刻(CST)的计价口径: 返回 (regime, window)。
+    日期<生效日→legacy; 否则 CST 09-12/14-18=peak, 其余=valley。"""
+    now = _dt.now(_CST)
+    if now.strftime("%Y%m%d") < PEAK_VALLEY_EFFECTIVE:
+        return "legacy", "valley"
+    h = now.hour
+    return "peak_valley", ("peak" if (9 <= h < 12 or 14 <= h < 18) else "valley")
+
+
+def _compute_cost_yuan(model: str, cache_hit: int, cache_miss: int, out_tok: int):
+    """按 cache hit/miss 分价计算一次调用成本(¥)。
+
+    20260817起: 峰谷双表(USD)×7.1; 之前: legacy价表(¥)÷7.2口径不变。
+    Returns: (cost_yuan, pricing_regime, window, fx)
+    """
+    regime, window = _pricing_now()
+    if regime == "peak_valley":
+        for k in ("deepseek-v4-pro", "deepseek-v4-flash"):
+            if k in model:
+                p = PEAK_VALLEY_PRICES_USD[k][window]
+                break
+        else:
+            p = PEAK_VALLEY_PRICES_USD["deepseek-v4-pro"][window]
+        cost_yuan = (cache_hit * p["hit"] + cache_miss * p["miss"] + out_tok * p["out"]) / 1e6 * FX_USD_CNY
+        return cost_yuan, regime, window, FX_USD_CNY
     for k in ("deepseek-v4-pro", "deepseek-v4-flash"):
         if k in model:
             p = MODEL_PRICING_YUAN[k]
             break
     else:
         p = MODEL_PRICING_YUAN["default"]
-    return (cache_hit * p["hit"] + cache_miss * p["miss"] + out_tok * p["output"]) / 1e6
+    cost_yuan = (cache_hit * p["hit"] + cache_miss * p["miss"] + out_tok * p["output"]) / 1e6
+    return cost_yuan, "legacy", "valley", CNY_PER_USD
 
 
 def _safe_payload(body: dict, chosen_model: str) -> tuple[dict, list]:
@@ -364,10 +563,11 @@ def _stabilize_messages(messages: list, max_history: int = 30) -> list:
             m = dict(m)
             m["content"] = _TIMESTAMP_PAT.sub("", c)  # 移除动态时间戳行
         out.append(m)
-    # 历史剪枝: 保留 system + 前 max_history 条(早期稳定前缀)
+    # 历史剪枝: 保留 system + 前 max_history-1 条早期 + 最后 1 条(当前请求)
     if len(out) > max_history:
-        # 保留 system(如有)+ 前 max_history-1 条早期 + 最后 1 条(当前请求)
-        out = out[:max_history]
+        # 修复(2026-08-16 三层审计): 旧实现 out[:max_history] 会丢掉最末尾的
+        # 当前用户消息 → 请求语义被改变 + 前缀与客户端预期错位(伤命中率)。
+        out = out[:max_history - 1] + out[-1:]
     return out
 
 
@@ -490,16 +690,18 @@ def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
                     chosen_model: str, provider: str, sel: RouteSelection, budget: float,
                     in_tok: int, out_tok: int, cache_hit: int, cache_miss: int,
                     stream: bool, latency_ms: int, cap_events: list,
-                    status: str = "ok", error: str = ""):
+                    status: str = "ok", error: str = "",
+                    session_fp: str = ""):
     """成本结算 + SavingsEngine + 事件落日志(流式/非流式统一入口)。
 
     C2: 流式/非流式都经此记账(_record_cost)→ 预算红线覆盖全部流量。
     M4: cache hit/miss 分价计费。M5: 流式不再硬编码 cost_yuan=0。
     M6: 每次成功响应产出 CostSavingsEvent。m3: request_id 贯穿。
+    Loop(2026-08-16): 成功→会话粘性+经验复利回流; 失败→错误复利回流。
     """
     degraded = "flash" in chosen_model and "pro" in str(model_hint).lower()
-    cost_yuan = _compute_cost_yuan(chosen_model, cache_hit, cache_miss, out_tok)
-    _record_cost(cost_yuan / CNY_PER_USD)
+    cost_yuan, pricing_regime, pricing_window, fx = _compute_cost_yuan(chosen_model, cache_hit, cache_miss, out_tok)
+    _record_cost(cost_yuan / fx)
     baseline_model = (model_hint.split("/")[-1] if model_hint else "") or "deepseek-v4-pro"
     saving_ev = savings_engine.compute_saving(
         agent_id=agent or "unknown", task_type=tier,
@@ -517,16 +719,23 @@ def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
         "input_tokens": in_tok, "output_tokens": out_tok,
         "cache_hit_tokens": cache_hit, "cache_miss_tokens": cache_miss,
         "task_type": tier,
-        "cost_yuan": round(cost_yuan, 6), "latency_ms": latency_ms, "stream": stream,
+        "cost_yuan": round(cost_yuan, 6), "pricing_regime": pricing_regime, "window": pricing_window,
+        "latency_ms": latency_ms, "stream": stream,
         "status": status, "error": error or "",
         "saving_usd": round(saving_ev.saving_amount, 6),
         "fallback_chain": sel.fallback_chain,
         "capability_events": cap_events,   # Phase A/B: 参数过滤事件(TrustEvent 链)
+        "session_fp": session_fp,
     })
     # B2 反向桥: 路由/降级/成本/缓存结果 → lao-signal.json(RIS 消费·双向飞轮)
     _update_lao_signal(provider, ok=(status == "ok"),
                        cache_hit=cache_hit, cache_miss=cache_miss,
-                       cost_usd=cost_yuan / CNY_PER_USD, degraded=degraded)
+                       cost_usd=cost_yuan / fx, degraded=degraded)
+    # 三层Loop回流(2026-08-16): L1结果→L2经验工厂(错误复利/经验复利)
+    _loop_record(provider, chosen_model, ok=(status == "ok"), error=error)
+    # 会话粘性: 成功 → 记住本次 provider+model(下轮同会话复用→前缀命中)
+    if status == "ok":
+        _sticky_put(session_fp, provider, chosen_model, agent)
 
 
 # ── OpenAI 兼容端点 ──────────────────────────────
@@ -544,6 +753,17 @@ def savings_report():
     return savings_engine.impact_report()
 
 
+@app.get("/v1/loop/status")
+def loop_status():
+    """三层Loop状态(L1命中率↔L2经验工厂↔L3确权·审计/Dashboard 消费)。"""
+    if LOOP is None:
+        return {"enabled": False}
+    try:
+        return {"enabled": True, **LOOP.status()}
+    except Exception as e:
+        return {"enabled": True, "error": str(e)}
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = await request.json()
@@ -559,13 +779,31 @@ async def chat_completions(request: Request):
     # 按 Agent 分发独立 key(治本·B1)·创始人 B 阶段: 先提取 agent 供路由绑定 provider
     agent = _extract_agent(model_hint, dict(request.headers))
 
+    # L1 命中率修复(2026-08-16): 真实任务文本+上下文规模 → 缓存感知路由激活
+    # (旧实现只传 tier 名 → 缓存感知分支生产恒不激活·死代码)
+    def _msg_text(ml: List[Dict]) -> str:
+        for m in reversed(ml):
+            if isinstance(m, dict) and m.get("role") == "user":
+                c = m.get("content", "")
+                if isinstance(c, list):
+                    c = " ".join(str(p.get("text", "")) for p in c if isinstance(p, dict))
+                return str(c)[:500]
+        return ""
+    task_text = _msg_text(messages)
+    _total_chars = sum(len(str(m.get("content", ""))) for m in messages if isinstance(m, dict))
+    context_tokens = int(_total_chars * 0.75)  # CJK≈1字1token·ASCII≈4字1token 的折中估算
+    session_fp = _session_fingerprint(messages)
+
     # ② 成本红线路由(用已算好的 tier 而非把 model 名当 task·根治 Nova 根因1)
     budget = _remaining_budget()
     try:
         # 关键修复: 不把 model_hint(如 deepseek-momo/deepseek-v4-flash)当 task 传给 classify
         # → 用 _infer_tier 已算出的 tier, 避免 model 名走 classify default=medium → 误判 pro
         # 创始人 B 阶段: 传 agent 实现按 Agent 绑定 provider(baron/ethan/momo→token-plan)
-        sel: RouteSelection = router.route_with_budget(task=tier or model_hint, budget=budget, agent=agent)
+        # v3.4: 附带 task_text/context_tokens 激活缓存感知选品(T2 真实生效)
+        sel: RouteSelection = router.route_with_budget(
+            task=tier or model_hint, budget=budget, agent=agent,
+            task_text=task_text, context_tokens=context_tokens)
     except Exception as e:
         logger.error(f"route_with_budget失败({e}), 使用默认")
         sel = router.route("light")
@@ -581,6 +819,21 @@ async def chat_completions(request: Request):
     if not agent and req_provider in PROVIDER_CONFIG:
         chosen_provider = req_provider
 
+    # 会话粘性(2026-08-16 L1命中率): 同会话复用上次成功的 provider+model
+    # → KVCache 前缀最大复用。粘性优先于命中率反馈(稳定即命中)。
+    sticky_entry = _sticky_get(session_fp)
+    if sticky_entry and _sticky_usable(sticky_entry, sel.tier, agent, chosen_provider):
+        chosen_provider = sticky_entry["provider"]
+        chosen_model = sticky_entry["model"]
+    else:
+        # 命中率反馈(2026-08-16 L1): 实测命中率显著低的 provider 让位给 fallback
+        sel_c = RouteSelection(task=sel.task, model=chosen_model, provider=chosen_provider,
+                               tier=sel.tier, cost=sel.cost,
+                               credit_based=sel.credit_based,
+                               fallback_chain=sel.fallback_chain)
+        sel_c = _prefer_hitrate_provider(sel_c)
+        chosen_model, chosen_provider = sel_c.model, sel_c.provider
+
     # B2/B5: RIS 健康门——被 RIS 阻断(down/isolated)的 provider 摘出候选·降级切换;
     # 全部候选被阻断 → 显式 503(禁止静默 fallback·ProviderHealthGate 哲学)
     chosen_provider, _block_ev = _ris_guard_provider(chosen_provider, request_id)
@@ -595,8 +848,11 @@ async def chat_completions(request: Request):
     payload, cap_events = _safe_payload(body, chosen_model)
     # P0-2 命中率99.9%: 传独立 user_id(DeepSeek 官方 KVCache 隔离机制)
     # 每个 agent 独立 user → 缓存按 agent 隔离·前缀更稳定·miss 降(官方CSV: miss价是hit价120倍)
+    # v3.4(2026-08-16): 无 agent 的裸请求按会话指纹隔离(不再共享池 → 跨会话互相冲刷缓存)
     if agent:
         payload["user"] = f"lao-{agent}"
+    elif session_fp:
+        payload["user"] = f"lao-s-{session_fp}"
     started = time.time()
     try:
         # C3: 同步 OpenAI 调用放线程池执行, 不阻塞 uvicorn 事件循环
@@ -611,6 +867,8 @@ async def chat_completions(request: Request):
             "capability_events": cap_events})
         # B2 反向桥: 转发失败也要进滚动窗口(错误率是 RIS 判定退化的核心信号)
         await asyncio.to_thread(_update_lao_signal, chosen_provider, False)
+        # 三层Loop(2026-08-16): 转发失败 → 错误复利回流(≥2次同类→锚点→路由约束)
+        await asyncio.to_thread(_loop_record, chosen_provider, chosen_model, False, str(e)[:200])
         return JSONResponse({"error": {"message": str(e), "type": "lao_router_forward"}}, status_code=502)
 
     latency_ms = int((time.time() - started) * 1000)
@@ -649,6 +907,7 @@ async def chat_completions(request: Request):
                     cache_hit=stream_usage["hit"], cache_miss=stream_usage["miss"],
                     stream=True, status=status, error=err,
                     latency_ms=int((time.time() - started) * 1000), cap_events=cap_events,
+                    session_fp=session_fp,
                 )
 
         return StreamingResponse(_sse_gen(), media_type="text/event-stream")
@@ -667,6 +926,7 @@ async def chat_completions(request: Request):
         chosen_model=chosen_model, provider=chosen_provider, sel=sel, budget=budget,
         in_tok=in_tok, out_tok=out_tok, cache_hit=cache_hit, cache_miss=cache_miss,
         stream=stream, latency_ms=latency_ms, cap_events=cap_events,
+        session_fp=session_fp,
     )
 
     return resp
