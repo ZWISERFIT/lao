@@ -27,7 +27,7 @@ class RouterDecision:
     # 9 Agent 的完整 fallback 链
     AGENT_ROUTES = {
         "shuyu": {
-            "primary": "deepseek-shuyu/deepseek-v4-pro",
+            "primary": "deepseek-shuyu/deepseek-v4-flash",
             "fallbacks": [
                 "deepseek-shuyu/deepseek-v4-flash",
                 "qwen/qwen-plus",
@@ -50,7 +50,7 @@ class RouterDecision:
             ],
         },
         "tristan": {
-            "primary": "deepseek-tristan/deepseek-v4-pro",
+            "primary": "deepseek-tristan/deepseek-v4-flash",
             "fallbacks": [
                 "deepseek-tristan/deepseek-v4-flash",
                 "qwen/qwen-plus",
@@ -81,7 +81,7 @@ class RouterDecision:
             ],
         },
         "zeus": {
-            "primary": "deepseek-zeus/deepseek-v4-pro",
+            "primary": "deepseek-zeus/deepseek-v4-flash",
             "fallbacks": [
                 "deepseek-zeus/deepseek-v4-flash",
                 "qwen/qwen-plus",
@@ -154,7 +154,7 @@ class RouterDecision:
         
         返回格式：
         {
-            "primary": "deepseek-shuyu/deepseek-v4-pro",
+            "primary": "deepseek-shuyu/deepseek-v4-flash",
             "fallbacks": ["deepseek-shuyu/deepseek-v4-flash", "qwen/qwen-plus"]
         }
         """
