@@ -48,12 +48,13 @@ def test_shuyu_light_uses_flash():
 
 
 def test_token_plan_pool_has_qwen_glm():
-    """token-plan 池含 qwen3.7-plus/glm-5.2/deepseek-v4-pro。"""
+    """token-plan 池含 qwen3.7-plus/glm-5.2/v4-flash(禁pro后)。"""
     r = ModelRouter()
     tp = {x["model"] for x in r.MODEL_POOL["medium"] if x.get("provider") == "token-plan"}
     assert "qwen3.7-plus" in tp
     assert "glm-5.2" in tp
-    assert "deepseek-v4-pro" in tp
+    assert "deepseek-v4-flash" in tp  # 禁 pro 后 token-plan 用 flash
+    assert "deepseek-v4-pro" not in tp  # pro 彻底禁用·不复活
 
 
 def test_unknown_agent_defaults_deepseek():
