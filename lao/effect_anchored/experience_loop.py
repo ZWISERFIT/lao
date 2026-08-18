@@ -158,17 +158,71 @@ class ExperienceLoop:
                             error: str = ""):
         """路由结果 → FeedbackBus(由 lao_router_server 结算时调用)。
 
-        W9(2026-08-19): 成功路由 → 触发 L3 经验累计检查(≥3条生成授权请求)。
+        W9(2026-08-19): 成功路由 → 经验分流(创始人修正1):
+          - agent_runtime(Agent运行经验) → 自动同步 Momo(不需授权·产品数据分析)
+          - user_personal/collaborative(用户/协同经验) → 累计≥3条生成授权请求
         失败路由 → 错误复利(原有逻辑)。均不阻塞路由。
         """
         res = self.bus.capture_route_result(provider, model, ok, error)
         if ok:
             try:
                 _out = os.environ.get("LAO_L3_OUT_DIR", "data")
-                self.l3_check_and_request_authorization(out_dir=_out)
+                self.l3_route_result_fanout(out_dir=_out)
             except Exception:
                 pass  # L3 检查失败不影响路由
         return res
+
+    def l3_route_result_fanout(self, out_dir: str = "data") -> Dict[str, Any]:
+        """W9 创始人修正1: 路由结果经验分流。
+
+        - agent_runtime 锚点 → 自动同步 Momo(不走授权流程)
+        - user_personal/collaborative 锚点 → 累计≥3条 → 授权请求
+        """
+        try:
+            anchors = self.anchor_store.lookup()[:50]
+            agent_runtime = [a for a in anchors
+                             if str(a.get("experience_type", "agent_runtime")) == "agent_runtime"]
+            need_consent = [a for a in anchors
+                            if str(a.get("experience_type", "agent_runtime")) in
+                            ("user_personal", "collaborative")]
+            out = {"agent_runtime_synced": 0, "consent_triggered": False}
+            if agent_runtime:
+                out["agent_runtime_synced"] = self.l3_sync_agent_runtime_to_momo(
+                    agent_runtime, out_dir=out_dir)
+            if need_consent:
+                _r = self.l3_check_and_request_authorization(out_dir=out_dir)
+                out["consent_triggered"] = bool(_r.get("requested"))
+            return out
+        except Exception:
+            return {"agent_runtime_synced": 0, "consent_triggered": False}
+
+    def l3_sync_agent_runtime_to_momo(self, anchors: List[Dict[str, Any]],
+                                      out_dir: str = "data") -> int:
+        """W9 创始人修正1: Agent 运行经验自动同步 Momo(不需授权)。
+
+        写入 Momo 可读的产品数据分析文件(agent_runtime_experiences.jsonl)。
+        """
+        try:
+            import json as _json
+            from datetime import datetime, timezone
+            os.makedirs(out_dir, exist_ok=True)
+            fp = os.path.join(out_dir, "agent_runtime_experiences.jsonl")
+            _n = 0
+            for a in anchors:
+                _rec = {
+                    "anchor_id": a.get("anchor_id"),
+                    "experience_type": "agent_runtime",
+                    "value": a.get("value"),
+                    "trust_weight": a.get("trust_weight", 0),
+                    "source": a.get("source"),
+                    "synced_at": datetime.now(timezone.utc).isoformat(),
+                }
+                with open(fp, "a", encoding="utf-8") as f:
+                    f.write(_json.dumps(_rec, ensure_ascii=False) + "\n")
+                _n += 1
+            return _n
+        except Exception:
+            return 0
 
     def match_experience(self, task_text: str, tier: str = "", agent: str = ""
                          ) -> Optional[Dict[str, Any]]:
@@ -313,8 +367,54 @@ class ExperienceLoop:
             verification_pct=round(float(cur.get("trust_weight", 0) or 0) * 100, 2),
             trust_event_hash=attestation if attestation.startswith("sha256:") else "",
             tags=list(cur.get("tags", [])))
+        # 创始人修正2(2026-08-19): L3确权 → L2动态参数更新 → L1命中率提升
+        # (C-2 缺陷修复: 确权产物反哺路由约束·闭环补全)
+        self._l3_feedback_route_params(cur)
         return {"anchor_id": aid, "domain": domain, "attestation": attestation,
                 "asset_id": asset.asset_id}
+
+    def _l3_feedback_route_params(self, anchor: Dict[str, Any]) -> bool:
+        """创始人修正2(2026-08-19): L3 确权经验 → L2 动态参数更新。
+
+        确权经验反哺路由参数(现有 add_route_constraint 机制·model_router 消费):
+          - 经验含 provider_avoid/model_avoid → 注入规避约束(成本/稳定性教训)
+          - 经验含 budget_cap → 收紧预算上限
+          - 经验含 prefer_* → 记录偏好(供后续路由参考·非强制)
+        返回是否成功注入。
+        """
+        try:
+            aid = anchor.get("anchor_id", "")
+            tw = float(anchor.get("trust_weight", 0) or 0)
+            value = anchor.get("value")
+            if not isinstance(value, dict):
+                return False
+            _constraint: Dict[str, Any] = {}
+            _reason = f"L3确权经验反哺(2026-08-19·confidence={tw:.2f})"
+            _pa = value.get("provider_avoid") or value.get("avoid_provider")
+            if _pa:
+                _constraint["provider_avoid"] = _pa if isinstance(_pa, list) else [_pa]
+            _ma = value.get("model_avoid") or value.get("avoid_model")
+            if _ma:
+                _constraint["model_avoid"] = _ma if isinstance(_ma, list) else [_ma]
+            _bc = value.get("budget_cap")
+            if _bc:
+                try:
+                    _constraint["budget_cap"] = float(_bc)
+                except (TypeError, ValueError):
+                    pass
+            if _constraint:
+                _constraint["reason"] = _reason
+                self.bus.add_route_constraint(aid, _constraint)
+                return True
+            # 无显式约束 → 记录参数更新事件(审计可追溯)
+            self.bus.emit(FeedbackEvent(
+                event_type="param_update", source="l3_confirmed",
+                payload={"anchor_id": aid, "trust_weight": tw,
+                         "action": "route_param_review"},
+                severity="info"))
+            return False
+        except Exception:
+            return False
 
     @staticmethod
     def _consent_items() -> List[Dict[str, Any]]:
@@ -400,19 +500,22 @@ class ExperienceLoop:
     #           进入确权链→下次请求W3经验直答
 
     def l3_pending_experiences(self) -> List[Dict[str, Any]]:
-        """获取待授权经验(已确权链外·未进入 W3 直答)。"""
+        """获取待授权经验(仅 user_personal/collaborative·agent_runtime 已自动同步Momo)。"""
         try:
             rep = self.confirm_experiences(authorized=False, limit=50)
             pending = set(rep.get("awaiting_consent", []))
             out = []
             for a in self.anchor_store.lookup()[:50]:
                 if a.get("anchor_id") in pending:
-                    out.append({
-                        "anchor_id": a.get("anchor_id"),
-                        "value": a.get("value"),
-                        "trust_weight": a.get("trust_weight", 0),
-                        "created_at": a.get("created_at", ""),
-                    })
+                    _et = str(a.get("experience_type", "agent_runtime"))
+                    if _et in ("user_personal", "collaborative"):
+                        out.append({
+                            "anchor_id": a.get("anchor_id"),
+                            "value": a.get("value"),
+                            "trust_weight": a.get("trust_weight", 0),
+                            "created_at": a.get("created_at", ""),
+                            "experience_type": _et,
+                        })
             return out
         except Exception:
             return []

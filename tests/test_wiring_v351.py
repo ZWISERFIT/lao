@@ -109,7 +109,7 @@ class TestW9ExperienceLoop(unittest.TestCase):
     """W9: L3 经验同步闭环"""
 
     def _make_mature_loop(self):
-        """构造含3条成熟经验的 ExperienceLoop。"""
+        """构造含3条成熟经验(user_personal·需授权)的 ExperienceLoop。"""
         import tempfile
         from datetime import datetime, timezone, timedelta
         from lao.effect_anchored.cognitive_anchor import Anchor
@@ -123,7 +123,7 @@ class TestW9ExperienceLoop(unittest.TestCase):
                 value={"trigger_condition": "退款纠纷", "principle": f"经验{i}",
                        "correction_count": 6 + i},
                 trust_weight=0.85, tags=["routing:decision", "customer:service"],
-                created_at=old_dt)
+                created_at=old_dt, experience_type="user_personal")
             loop.anchor_store.put(anchor)
         return loop, tmp
 
@@ -158,6 +158,54 @@ class TestW9ExperienceLoop(unittest.TestCase):
         # 未授权 → match_experience 不应返回(awaiting_consent 拦截)
         r = loop.match_experience("退款纠纷怎么处理", tier="medium", agent="tristan")
         self.assertIsNone(r, "未授权经验不应被 W3 直答消费")
+
+    def test_l3_agent_runtime_auto_sync_momo(self):
+        """创始人修正1: agent_runtime 经验不授权·自动同步 Momo"""
+        import os
+        from datetime import datetime, timezone, timedelta
+        from lao.effect_anchored.cognitive_anchor import Anchor
+        from lao.effect_anchored.experience_loop import ExperienceLoop
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        loop = ExperienceLoop(home=os.path.join(tmp, "loop"))
+        old_dt = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+        loop.anchor_store.put(Anchor(
+            anchor_id="rt-0", anchor_type="decision",
+            value={"trigger_condition": "任务", "principle": "运行经验",
+                   "correction_count": 6},
+            trust_weight=0.85, tags=["routing:decision"], created_at=old_dt,
+            experience_type="agent_runtime"))
+        r = loop.l3_route_result_fanout(out_dir=tmp)
+        self.assertEqual(r.get("agent_runtime_synced"), 1,
+                         f"agent_runtime 应自动同步: {r}")
+        self.assertTrue(os.path.exists(os.path.join(tmp, "agent_runtime_experiences.jsonl")),
+                        "Momo 同步文件应生成")
+        # 不应触发授权请求
+        self.assertFalse(os.path.exists(os.path.join(tmp, "pending_user_authorizations.jsonl")),
+                         "agent_runtime 不应触发授权")
+
+    def test_l3_confirm_feedback_route_params(self):
+        """创始人修正2: L3确权 → L2动态参数更新(provider_avoid 约束注入)"""
+        import os
+        from datetime import datetime, timezone, timedelta
+        from lao.effect_anchored.cognitive_anchor import Anchor
+        from lao.effect_anchored.experience_loop import ExperienceLoop
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        loop = ExperienceLoop(home=os.path.join(tmp, "loop"))
+        old_dt = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+        loop.anchor_store.put(Anchor(
+            anchor_id="exp-fail", anchor_type="decision",
+            value={"trigger_condition": "token-plan故障", "principle": "避开",
+                   "provider_avoid": "token-plan", "correction_count": 8},
+            trust_weight=0.9, tags=["routing:decision", "runtime:fail"],
+            created_at=old_dt, experience_type="agent_runtime"))
+        rep = loop.confirm_experiences(authorized=True, limit=50)
+        self.assertTrue(rep.get("confirmed"), f"应确权: {rep}")
+        constraints = loop.bus.active_route_constraints()
+        self.assertTrue(any("token-plan" in str(c.get("provider_avoid", []))
+                            for c in constraints),
+                        f"L3确权应注入 provider_avoid 约束: {constraints}")
 
 
 if __name__ == "__main__":

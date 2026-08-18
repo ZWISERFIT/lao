@@ -1,24 +1,27 @@
 # v3.5.1-fix: R4/R1/A1-A3
 # v3.5.1-glm: R1
+# v3.5.1-wiring: C-1 注释对齐(2026-08-19 三方验证·头部标签更新为 v3.4 定义)
 """
-Feedback Bus — LAO 2.7 P0-① 步骤③
-=================================
+Feedback Bus — LAO v3.4 三层Loop组件 (L2 经验工厂核心)
+=========================================================
 
-三层数据不再单向流动。Feedback Bus 让经验/锚点/路由形成闭环回流：
+三层数据不再单向流动。Feedback Bus 让经验/锚点/路由形成闭环回流
+(v3.4 权威定义·2026-08-16 创始人令·三方验证定稿 2026-08-19):
 
-    L3 经验 → L2 Anchor 升级 → L1 Router 优化
-      ↑__________↖______________↙
+    L1(命中率) ←─ 反哺 ─ L3(确权经验) ←─ L2(经验工厂产锚点)
+            ↘              ↗
+             Agent运营经验(反哺L1命中率+RIS免疫)
 
-方向:
-    L3→L2: 经验事件 → 促生/强化锚点(DecisionAnchor/CognitiveAnchor)
-    L2→L1: 锚点(尤其失败约束) → 反向影响 Router 决策(预算/降级/模型选择)
-    L1→L3: 路由结果(成功/失败) → 沉淀为经验事件 → 回流L2
+方向(对齐 experience_loop.py 头部权威定义):
+    L1→L2: capture_route_result — 路由结果 → 经验事件(供萃取·产锚点)
+    L2→L1: promote_to_anchor/constrain_route — 锚点(约束) → 反哺 Router
+    L2→L3: confirm_experiences — 锚点 → 幻觉门/readiness → 授权 → 存证
 
 核心机制:
     emit(event)              — 经验/决策事件入总线
-    L3→L2: promote_to_anchor — 事件累积 → 升级为锚点(对齐Experience Atom Engine)
+    L2: promote_to_anchor — 事件累积 → 升级为锚点(对齐Experience Atom Engine)
     L2→L1: constrain_route   — 锚点(约束) → 给 Router 的 route() 注入约束
-    L1→L3: capture_route_result — 路由结果 → 回写事件
+    L1→L2: capture_route_result — 路由结果 → 回写事件(供L2萃取)
 
 这实现创始人"自动错误/经验萃取形成复利和自动化闭环"(问题4)的接口层:
     不再需要手动 lao atom → lao verify → 手动注册,
@@ -33,7 +36,7 @@ import json
 
 @dataclass
 class FeedbackEvent:
-    """总线事件（经验/决策/路由的统一载体）。"""
+    """总线事件(经验/决策/路由的统一载体)。"""
     event_type: str            # "error" | "pattern" | "decision" | "route_result"
     source: str                # 来源层: "l1_router" | "l2_anchor" | "l3_experience" | "agent"
     payload: Dict[str, Any]
@@ -107,9 +110,9 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
     L1/L2/L3 双向反馈总线。
 
     emit:     事件入总线
-    L3→L2:   promote_to_anchor  — 经验事件 → 锚点(调用认知anchor存储)
-    L2→L1:   constrain_route    — 锚点约束 → Router 路由优化钩子
-    L1→L3:   capture_route_result — 路由结果 → 经验回流
+    L3→L2:   promote_to_anchor  - 经验事件 → 锚点(调用认知anchor存储)
+    L2→L1:   constrain_route    - 锚点约束 → Router 路由优化钩子
+    L1→L3:   capture_route_result - 路由结果 → 经验回流
 
     2026-08-16 三层Loop闭环修复:
     - state_path: 约束/免疫/错误计数持久化(重启不丢·错误复利可累积)
@@ -252,11 +255,11 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
         """从 payload 提取或推算 elapsed 毫秒数(R1 TimeoutMatrix 集成兜底)。
 
         提取优先级:
-          1. payload.elapsed_ms / payload.latency_ms — 直传字段
-          2. payload 内 started_at → completed_at 差值 — 双时间戳推算
-          3. payload 内 started_at → event.timestamp 差值 — 事件创建≈调用完成
+          1. payload.elapsed_ms / payload.latency_ms - 直传字段
+          2. payload 内 started_at → completed_at 差值 - 双时间戳推算
+          3. payload 内 started_at → event.timestamp 差值 - 事件创建≈调用完成
 
-        全部无法计算时返回 0.0，调用方据此静默跳过 judge。
+        全部无法计算时返回 0.0,调用方据此静默跳过 judge。
         """
         # 1. 直传字段
         direct = float(payload.get("elapsed_ms") or payload.get("latency_ms") or 0)
@@ -456,7 +459,7 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
         return self.cognitive.retrieve(query)
 
     def subscribe(self, event_type: str, fn: Callable) -> None:
-        """订阅某一类事件（如 'error' 自动萃取）。"""
+        """订阅某一类事件(如 'error' 自动萃取)。"""
         self._listeners.setdefault(event_type, []).append(fn)
 
     # -- L3 → L2: 经验升级为锚点 ------------------------------------------
@@ -465,15 +468,15 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
                           make_anchor_fn: Callable, min_evidence: int = 2) -> Optional[str]:
         """
         经验事件 → 升级为认知锚点。
-        - 同类错误事件 ≥ min_evidence → 自动生成 DecisionAnchor（防复发）
-        - 返回生成的 anchor_id；不足证据则返回 None（不强推）
+        - 同类错误事件 ≥ min_evidence → 自动生成 DecisionAnchor(防复发)
+        - 返回生成的 anchor_id;不足证据则返回 None(不强推)
         """
         # 按 source 聚合同类事件
         evts = [e for e in self._events
                 if e.event_type == event.event_type and e.source == event.source]
         if len(evts) < min_evidence:
             return None
-        # 生成锚点（由 make_anchor_fn 决定具体层/结构）
+        # 生成锚点(由 make_anchor_fn 决定具体层/结构)
         anchor = make_anchor_fn(event, evidence_count=len(evts))
         if anchor:
             anchor_store.put(anchor)
@@ -484,7 +487,7 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
 
     def add_route_constraint(self, anchor_id: str, constraint: Dict[str, Any]) -> None:
         """
-        锚点 → Router 约束（L2→L1）。
+        锚点 → Router 约束(L2→L1)。
         constraint 例: {"provider_avoid": ["token-plan"], "model_avoid": ["deepseek-v4-flash"],
                         "budget_cap": 5.0, "reason": "..."}
         """
@@ -534,7 +537,7 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
                 avoid_models.update(mv if isinstance(mv, list) else [mv])
         cur = route_selection
         if cur.provider in avoid_providers or cur.model in avoid_models:
-            # 跳 fallback（找非规避的）
+            # 跳 fallback(找非规避的)
             for fc in getattr(cur, "fallback_chain", []):
                 prov, mod = fc.split("/", 1)
                 if prov not in avoid_providers and mod not in avoid_models:
@@ -552,7 +555,7 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
     def capture_route_result(self, provider: str, model: str, success: bool,
                              error: Optional[str] = None,
                              usage_present: bool = True) -> FeedbackEvent:
-        """记录一次路由调用结果（成功/失败），供经验萃取。
+        """记录一次路由调用结果(成功/失败),供经验萃取。
 
         Loop 闭环(2026-08-16):
         - error_signature 归一(错误前120字符): 认知层计数与自动升级同键
@@ -593,7 +596,7 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
     # -- 诊断 ---------------------------------------------------------------
 
     def stats(self) -> Dict[str, Any]:
-        """总线统计（贡献了数据驱动自动萃取的可见性）。"""
+        """总线统计(贡献了数据驱动自动萃取的可见性)。"""
         from collections import Counter
         c = Counter(e.event_type for e in self._events)
         return {"total_events": len(self._events),

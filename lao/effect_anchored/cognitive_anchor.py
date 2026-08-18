@@ -53,6 +53,9 @@ class Anchor:
     tags: List[str] = field(default_factory=list)
     trust_weight: float = 1.0   # 0.0-1.0, >=0.8 视为 Tier0 永固
     fixture_pair_id: Optional[str] = None   # A1-A3: 关联的回归重放夹具对ID
+    # 创始人修正1(2026-08-19): L3 经验分类 — agent_runtime(不需授权·自动同步Momo)
+    #                                / user_personal(需授权) / collaborative(需授权)
+    experience_type: str = "agent_runtime"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
