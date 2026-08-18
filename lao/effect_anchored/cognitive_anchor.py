@@ -1,4 +1,5 @@
 # v3.5.1-fix: A1-A3
+# v3.5.1-glm: A1-A3
 """
 Cognitive Anchor Framework — LAO 2.7 P0-①
 =========================================
@@ -63,6 +64,36 @@ class Anchor:
         return hashlib.sha256(
             json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
         ).hexdigest()
+
+    def run_fixture_replay(self, route_fn: Any) -> Dict[str, Any]:
+        """用 self.fixture_pair_id 从 store 查找 FixturePair 并执行回归重放（A3）。
+
+        从 validation.fixture_pair 模块的 fixture_pair_store 中按 fixture_pair_id
+        查找对应的 FixturePair，调用 replay_pairs 执行重放并返回统计结果。
+        fixture_pair_id 为 None 时跳过；查找或重放失败时返回 skipped 结构。
+
+        Args:
+            route_fn: 接受 context 返回 "BLOCK"|"PASS" 的调用函数。
+
+        Returns:
+            replay_pairs 的统计 dict，或 {"skipped": True, "reason": ...}。
+        """
+        if self.fixture_pair_id is None:
+            return {"skipped": True, "reason": "no fixture_pair_id"}
+        try:
+            from lao.effect_anchored.validation.fixture_pair import (
+                fixture_pair_store,
+                replay_pairs,
+            )
+            pair = fixture_pair_store.get(self.fixture_pair_id)
+            if pair is None:
+                return {
+                    "skipped": True,
+                    "reason": f"fixture pair {self.fixture_pair_id} not found",
+                }
+            return replay_pairs([pair], self, route_fn)
+        except Exception as e:
+            return {"skipped": True, "reason": str(e)}
 
 
 @dataclass

@@ -1,4 +1,5 @@
 # v3.5.1-fix: R4/R1/A1-A3
+# v3.5.1-glm: R1
 """
 Feedback Bus — LAO 2.7 P0-① 步骤③
 =================================
@@ -247,6 +248,48 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
 
     # -- 事件入总线 ---------------------------------------------------------
 
+    def _extract_elapsed_ms(self, payload: Dict[str, Any], event: FeedbackEvent) -> float:
+        """从 payload 提取或推算 elapsed 毫秒数(R1 TimeoutMatrix 集成兜底)。
+
+        提取优先级:
+          1. payload.elapsed_ms / payload.latency_ms — 直传字段
+          2. payload 内 started_at → completed_at 差值 — 双时间戳推算
+          3. payload 内 started_at → event.timestamp 差值 — 事件创建≈调用完成
+
+        全部无法计算时返回 0.0，调用方据此静默跳过 judge。
+        """
+        # 1. 直传字段
+        direct = float(payload.get("elapsed_ms") or payload.get("latency_ms") or 0)
+        if direct > 0:
+            return direct
+
+        # 2/3. 时间戳差值兜底
+        def _parse_ts(val: Any) -> Optional[datetime]:
+            """解析 ISO-8601 时间戳字符串(Z 后缀兼容)。"""
+            if not val or not isinstance(val, str):
+                return None
+            try:
+                return datetime.fromisoformat(val.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                return None
+
+        start_keys = ("started_at", "start_time", "request_start", "ts")
+        end_keys = ("completed_at", "end_time", "response_end")
+
+        start_ts = next((_parse_ts(payload.get(k)) for k in start_keys if payload.get(k)), None)
+        if start_ts is None:
+            return 0.0
+
+        end_ts = next((_parse_ts(payload.get(k)) for k in end_keys if payload.get(k)), None)
+        if end_ts is None:
+            # 3. 无显式 end → 用 event.timestamp(事件创建≈调用完成时刻)
+            end_ts = _parse_ts(event.timestamp)
+        if end_ts is None:
+            return 0.0
+
+        delta_ms = (end_ts - start_ts).total_seconds() * 1000
+        return max(0.0, round(delta_ms, 1))
+
     def emit(self, event: FeedbackEvent) -> None:
         """事件入总线 + 触发对应监听器 + 自动分发到三层认知系统(P0-18)。
 
@@ -267,7 +310,7 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
             try:
                 p = event.payload or {}
                 mode = str(p.get("mode") or p.get("tier") or p.get("task_type") or "default")
-                elapsed = float(p.get("elapsed_ms") or p.get("latency_ms") or 0)
+                elapsed = self._extract_elapsed_ms(p, event)
                 if elapsed > 0:
                     verdict = self._timeout_matrix.judge(mode, elapsed)
                     if verdict["action"] in ("slow", "fallback"):

@@ -1,4 +1,5 @@
 # v3.5.1-fix: R4
+# v3.5.1-glm: R4
 """
 Anomaly Detector — LAO v3.1 P0-10
 ===================================
@@ -129,11 +130,33 @@ class AnomalyDetector:
         )
 
     def _usage_missing(self, w: Dict[str, Any]) -> Anomaly:
+        """检测 usage 缺失异常(R4)。
+
+        支持两个信号, 任一 >= 1 即触发:
+          - usage_missing_count: 汇总周期内 usage 字段缺失次数
+          - responses_without_usage: 响应中未携带 usage 字段的次数
+
+        严重度分级: 窗口内合计计数 >= 3 升为 high, 单次/少量为 mid。
+        """
         count = int(w.get("usage_missing_count", 0))
-        detected = count >= 1
+        without_usage = int(w.get("responses_without_usage", 0))
+        total = count + without_usage
+        detected = count >= 1 or without_usage >= 1
+        if not detected:
+            severity = "none"
+        elif total >= 3:
+            severity = "high"
+        else:
+            severity = "mid"
         return Anomaly(
-            type="usage_missing", severity="mid" if detected else "none",
-            detected=detected, metrics={"usage_missing_count": count},
+            type="usage_missing",
+            severity=severity,
+            detected=detected,
+            metrics={
+                "usage_missing_count": count,
+                "responses_without_usage": without_usage,
+                "window": w,
+            },
         )
 
     def detect_layer1(self, window: Dict[str, Any], baseline: Optional[Dict[str, Any]] = None) -> List[Anomaly]:

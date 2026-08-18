@@ -1,4 +1,6 @@
 # v3.5.1-fix: R3
+# v3.5.1-glm: R3
+# v3.5.1-glm: R5
 """
 ModelRouter — 模型路由与降级链路 v2.2
 ====================================
@@ -126,7 +128,9 @@ class ModelRouter:
         except (ValueError, IndexError):
             return 999.0
 
-    # R3: 跨provider模型存在性验证
+    # R3: 跨provider模型存在性验证 — 5分钟TTL缓存(避免每次路由打网络请求)
+    _MODEL_CACHE_TTL: float = 300.0  # 5分钟
+
     PROVIDER_BASE_URLS = {
         "deepseek": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         "token-plan": os.environ.get("TOKEN_PLAN_BASE_URL", "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"),
@@ -134,9 +138,38 @@ class ModelRouter:
     }
 
     def _verify_model_exists(self, provider: str, model: str) -> bool:
-        """HTTP GET {base_url}/v1/models, 检查 data[].id 是否包含 model。超时3秒失败返回False。"""
+        """验证模型在指定 provider 端点是否真实可用。
+
+        通过 HTTP GET {base_url}/models 拉取 provider 的模型列表，检查
+        model 是否在返回的 data[].id 集合中。结果以 5 分钟 TTL 缓存到类级
+        字典（provider -> (model_set, timestamp)），避免每次路由都发起
+        网络请求。
+
+        base_url 两种形态处理：
+          - 以 /v1 结尾 → 拼接 /models
+          - 否则 → 拼接 /v1/models
+
+        任何异常（网络超时、JSON 解析失败、provider 未知）均返回 False，
+        不向上抛错，保证路由链路 fail-open。
+
+        Args:
+            provider: provider 名称（deepseek / token-plan / novarouteai）。
+            model: 待验证的模型标识。
+
+        Returns:
+            True 表示模型在 provider 端点可用；False 表示不可用或验证失败。
+        """
+        import time
         import urllib.request
         import json as _json
+
+        now = time.time()
+        cached = self._model_cache.get(provider)
+        if cached is not None:
+            model_set, ts = cached
+            if now - ts < self._model_cache_ttl:
+                return model in model_set
+
         base = self.PROVIDER_BASE_URLS.get(provider, "").rstrip("/")
         if not base:
             return False
@@ -148,9 +181,10 @@ class ModelRouter:
             with urllib.request.urlopen(url, timeout=3) as resp:
                 data = _json.loads(resp.read().decode("utf-8", "ignore"))
             ids = {item.get("id", "") for item in data.get("data", [])}
-            return model in ids
         except Exception:
             return False
+        self._model_cache[provider] = (ids, now)
+        return model in ids
 
     # 三 provider 故障转移（2026-08-10 实测均 200）:
     #   deepseek(api.deepseek.com):    deepseek-v4-pro/flash ✅
@@ -249,6 +283,9 @@ class ModelRouter:
         # R5: 路由切换审计
         from lao.effect_anchored.routing.switch_audit import SwitchAuditor
         self._switch_auditor = SwitchAuditor()
+        # R3: 模型存在性验证缓存(实例级·防跨实例/跨测试污染)
+        self._model_cache: dict = {}          # provider -> (model_set, timestamp)
+        self._model_cache_ttl: float = 300.0  # 5分钟
 
     def with_event_checker(self, checker) -> "ModelRouter":
         """注入自定义事件检查员(v3.5 L1·可测)。"""
@@ -293,6 +330,34 @@ class ModelRouter:
         """是否已超当日预算红线。"""
         spend = self._daily_spend()
         return spend > 0 and self._daily_budget > 0 and spend >= self._daily_budget
+
+    def _audit_switch(self, tier: str, from_entry: dict, to_entry: dict, reason: str) -> None:
+        """R5: 记录路由切换审计事件(审计失败不阻塞路由)。
+
+        在 route() 内各降级/过滤节点捕获 from→to 的 provider/model 变化，
+        通过 SwitchAuditor 持久化到 switch_audit.jsonl 供周报/追溯。
+
+        Args:
+            tier: 任务层级(ultra_light/light/medium/...)。
+            from_entry: 切换前 pool 首条目(dict·含 provider/model)。
+            to_entry: 切换后 pool 首条目。
+            reason: 切换原因(agent_binding/feedback_constraint/budget_redline)。
+        """
+        if (from_entry.get("provider") == to_entry.get("provider") and
+                from_entry.get("model") == to_entry.get("model")):
+            return
+        try:
+            from lao.effect_anchored.routing.switch_audit import SwitchAuditEntry
+            self._switch_auditor.record(SwitchAuditEntry(
+                task_type=tier,
+                from_provider=from_entry.get("provider", ""),
+                from_model=from_entry.get("model", ""),
+                to_provider=to_entry.get("provider", ""),
+                to_model=to_entry.get("model", ""),
+                reason=reason,
+            ))
+        except Exception:
+            pass  # 审计失败不阻塞路由
 
     def _cache_awareness(self, task: str, task_text: str = "",
                          context_tokens: int = 0) -> dict:
@@ -397,10 +462,12 @@ class ModelRouter:
                         except (TypeError, ValueError):
                             pass
                 if _avoid_providers or _avoid_models:
+                    _fb_from = pool[0] if pool else {}
                     filtered = [e for e in pool
                                 if e.get("provider") not in _avoid_providers
                                 and e.get("model") not in _avoid_models]
                     if filtered:  # 全被规避时保底用原池(路由不能空转)
+                        self._audit_switch(tier, _fb_from, filtered[0], "feedback_constraint")
                         pool = filtered
             except Exception:
                 pass  # 反哺链路故障不阻塞路由(fail-open)
@@ -410,8 +477,10 @@ class ModelRouter:
         # 其他 agent → 只选 deepseek 池
         if agent:
             bind_provider = AGENT_PROVIDER_BINDING.get(agent, "deepseek")
+            _ab_from = pool[0] if pool else {}
             bound = [e for e in pool if e.get("provider") == bind_provider]
             if bound:  # 绑定 provider 有可用 model → 只用它
+                self._audit_switch(tier, _ab_from, bound[0], "agent_binding")
                 pool = bound
 
         # credit_mode过滤
@@ -437,8 +506,10 @@ class ModelRouter:
                 _force_flash = True
         if _force_flash:
             # 超预算降级: 匹配 deepseek flash, 三个 provider 统一用 deepseek-v4-flash
+            _br_from = pool[0] if pool else {}
             _flash = [e for e in pool if "deepseek-v4-flash" in e.get("model", "")]
             if _flash:
+                self._audit_switch(tier, _br_from, _flash[0], "budget_redline")
                 pool = _flash
 
         # === 缓存感知路由(T2·C3最致命漏洞) ===

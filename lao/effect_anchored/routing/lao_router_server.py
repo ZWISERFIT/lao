@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # v3.5.1-fix: R5
+# v3.5.1-glm: R5
 """
 lao-router — LAO 成本优化 OpenAI 兼容代理 (方案A·9Agent共用)
 =============================================================================
@@ -338,7 +339,7 @@ def _prefer_hitrate_provider(sel: RouteSelection) -> RouteSelection:
                     task_type=sel.tier,
                     from_provider=old_provider, from_model=old_model,
                     to_provider=prov, to_model=model,
-                    reason=f"hitrate_feedback: {cur_rate}->{cand_rate}",
+                    reason="hitrate_feedback",
                 ))
             except Exception:
                 pass
@@ -420,7 +421,7 @@ def _ris_guard_provider(chosen_provider: str, request_id: str = "") -> tuple:
                 from lao.effect_anchored.routing.switch_audit import SwitchAuditor as _SA, SwitchAuditEntry as _SAE
                 _SA().record(_SAE(
                     from_provider=chosen_provider, to_provider=cand,
-                    reason="ris_health_gate_block",
+                    reason="ris_block",
                 ))
             except Exception:
                 pass
