@@ -140,7 +140,10 @@ class ModelRouter:
         base = self.PROVIDER_BASE_URLS.get(provider, "").rstrip("/")
         if not base:
             return False
-        url = f"{base}/v1/models"
+        if base.endswith("/v1"):
+            url = f"{base}/models"
+        else:
+            url = f"{base}/v1/models"
         try:
             with urllib.request.urlopen(url, timeout=3) as resp:
                 data = _json.loads(resp.read().decode("utf-8", "ignore"))
@@ -161,7 +164,7 @@ class ModelRouter:
         "ultra_light": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
-            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
@@ -169,14 +172,14 @@ class ModelRouter:
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "medium": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
@@ -184,35 +187,35 @@ class ModelRouter:
         "heavy": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "reasoning": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "code": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "cn_explain": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
-            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "cn_creative": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
@@ -433,8 +436,7 @@ class ModelRouter:
             if _main_cost > _budget:
                 _force_flash = True
         if _force_flash:
-            # 超预算降级: 匹配任意 deepseek flash(无后缀/带-0731均可), 三个 provider 都能降级
-            # (novarouteai/deepseek 用无后缀, token-plan 用-0731 → 不能只匹配单一后缀)
+            # 超预算降级: 匹配 deepseek flash, 三个 provider 统一用 deepseek-v4-flash
             _flash = [e for e in pool if "deepseek-v4-flash" in e.get("model", "")]
             if _flash:
                 pool = _flash

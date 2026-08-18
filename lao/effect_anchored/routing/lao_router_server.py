@@ -327,6 +327,7 @@ def _prefer_hitrate_provider(sel: RouteSelection) -> RouteSelection:
         if cand_rate is None:
             continue
         if cand_rate - (cur_rate if cur_rate is not None else 0.0) >= HITRATE_SWAP_GAP:
+            old_provider, old_model = sel.provider, sel.model
             sel.provider, sel.model = prov, model
             _log_event({"type": "hitrate_feedback_switch", "from": cur_rate,
                         "to": cand_rate, "provider": prov, "model": model})
@@ -335,7 +336,7 @@ def _prefer_hitrate_provider(sel: RouteSelection) -> RouteSelection:
                 from lao.effect_anchored.routing.switch_audit import SwitchAuditor as _SA, SwitchAuditEntry as _SAE
                 _SA().record(_SAE(
                     task_type=sel.tier,
-                    from_provider=sel.provider, from_model=sel.model,
+                    from_provider=old_provider, from_model=old_model,
                     to_provider=prov, to_model=model,
                     reason=f"hitrate_feedback: {cur_rate}->{cand_rate}",
                 ))
