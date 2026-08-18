@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# v3.5.1-fix: R5
 """
 lao-router — LAO 成本优化 OpenAI 兼容代理 (方案A·9Agent共用)
 =============================================================================
@@ -329,6 +330,17 @@ def _prefer_hitrate_provider(sel: RouteSelection) -> RouteSelection:
             sel.provider, sel.model = prov, model
             _log_event({"type": "hitrate_feedback_switch", "from": cur_rate,
                         "to": cand_rate, "provider": prov, "model": model})
+            # R5: 记录命中率驱动的provider切换
+            try:
+                from lao.effect_anchored.routing.switch_audit import SwitchAuditor as _SA, SwitchAuditEntry as _SAE
+                _SA().record(_SAE(
+                    task_type=sel.tier,
+                    from_provider=sel.provider, from_model=sel.model,
+                    to_provider=prov, to_model=model,
+                    reason=f"hitrate_feedback: {cur_rate}->{cand_rate}",
+                ))
+            except Exception:
+                pass
             break
     return sel
 
@@ -402,6 +414,15 @@ def _ris_guard_provider(chosen_provider: str, request_id: str = "") -> tuple:
                   "blocked": chosen_provider, "fallback": cand,
                   "reason": "blocked by RIS (down/isolated)", "source": snap["source"]}
             _log_event(ev)
+            # R5: 记录RIS驱动的provider切换
+            try:
+                from lao.effect_anchored.routing.switch_audit import SwitchAuditor as _SA, SwitchAuditEntry as _SAE
+                _SA().record(_SAE(
+                    from_provider=chosen_provider, to_provider=cand,
+                    reason="ris_health_gate_block",
+                ))
+            except Exception:
+                pass
             return cand, ev
     ev = {"request_id": request_id, "type": "ris_provider_block",
           "blocked": chosen_provider, "fallback": None,
@@ -427,38 +448,94 @@ ProviderCapabilityRegistry = {
 
 
 def _capability(model: str) -> dict:
-    """获取模型能力(默认按 default 兜底)。"""
+    """获取模型能力(默认按 default 兜底)。plain名与-0731后缀都能命中flash键。"""
     for k in ("deepseek-v4-flash", "deepseek-v4-pro"):
         if k in model:
             return ProviderCapabilityRegistry[k]
     return ProviderCapabilityRegistry["default"]
 
 
-# M4: cache hit/miss 价差计费(DeepSeek 官方口径: prompt = hit + miss·hit 价远低于 miss)
-# ¥/1M tokens; miss 档与旧固定单价一致(无缓存时成本不变), hit 档按官方价差折算
-# ⚠️ LEGACY 价表: 仅 PEAK_VALLEY_EFFECTIVE(20260817) 之前的事件使用(7.2汇率口径)
-MODEL_PRICING_YUAN = {
-    "deepseek-v4-pro":   {"hit": 0.6, "miss": 3.0, "output": 6.0},
-    "deepseek-v4-flash": {"hit": 0.1, "miss": 1.0, "output": 2.0},
-    "default":           {"hit": 0.6, "miss": 3.0, "output": 6.0},
-}
-CNY_PER_USD = 7.2  # legacy 汇率(20260817前事件); 峰谷口径用 FX_USD_CNY=7.1
-
-# ── 峰谷计价(2026-08-17 00:00 CST 生效 · DeepSeek官方价 · Nova规格/Stella v2.1 ground truth) ──
-# 官方USD价(per 1M tokens): 峰=UTC 01-04+06-10(=CST 09-12+14-18), 其余为谷
-PEAK_VALLEY_EFFECTIVE = "20260817"  # 生效日(含)起用新价·按CST日期切换
-FX_USD_CNY = 7.1  # 与Stella token-cost-model v2.1对齐(官方账单CSV到账后复核)
-PEAK_VALLEY_PRICES_USD = {
-    "deepseek-v4-flash": {"peak":   {"hit": 0.014, "miss": 0.44, "out": 1.32},
-                          "valley": {"hit": 0.007, "miss": 0.22, "out": 0.66}},
-    "deepseek-v4-pro":   {"peak":   {"hit": 0.044, "miss": 1.32, "out": 3.96},
-                          "valley": {"hit": 0.022, "miss": 0.66, "out": 1.98}},
-}
+# ── 官方CNY直读计价(官方账单CSV price列 = 单一source of truth · 事故#001行动项#2) ──
+# 2026-08-18 Stella派单/Nova方案: 禁止硬编码价表·禁止USD价×汇率换算
+# (旧USD×7.1路径偏差[V·6-cell]: miss +56.2% / out +134.3% / pro hit +524.8%)
+# 统一价 [V·8/10-16官方amount.csv三源交叉]: flash hit¥0.02/M·miss¥1/M·out¥2/M; pro hit¥0.025/M·miss¥3/M·out¥6/M
+# 峰价(2026-08-17生效): 不预先硬编码 — 8/17官方CSV到账后由price列按(日期+CST小时)自动解析
+PEAK_VALLEY_EFFECTIVE = "20260817"  # 峰谷制生效日(含)·按CST日期切换
+FX_USD_CNY = 7.1  # 仅用于USD预算口径换算(_record_cost)·不再参与计价
 _CST = _tzone(_tdelta(hours=8))
+_CST_PEAK_HOURS = frozenset(("09","10","11","14","15","16","17"))  # 峰窗口 CST 09-12,14-18
+_CSV_PRICE_DIRS = (
+    "/home/agentuser/shared/tkee/ledger/extracted",  # Nova official-csv-reconcile管道产出(权威)
+    "/home/agentuser/shared/state/usage-csv-0812",
+)
+_CSV_UNIFIED_FALLBACK = {  # 官方8/16 CSV冻结副本[V]·仅CSV管道不可读时兜底(log WARNING)·非常规价源
+    # 键用官方CSV的plain模型名(计费口径)·API模型ID(deepseek-v4-flash-0731)在_lookup_key归一
+    "deepseek-v4-flash": {"hit": 0.02, "miss": 1.0, "output": 2.0},
+    "deepseek-v4-pro":   {"hit": 0.025, "miss": 3.0, "output": 6.0},
+}
+_csv_price_cache: Dict[str, Any] = {"loaded_at": 0.0, "unified": None, "peak": None}
+_csv_price_lock = threading.Lock()
+
+
+def _classify_price_type(ptype: str):
+    if "cache_hit" in ptype: return "hit"
+    if "cache_miss" in ptype or ptype == "input_tokens": return "miss"
+    if "output" in ptype: return "output"
+    return None
+
+
+def _pricing_model_key(model: str) -> str:
+    """归一到官方CSV计费口径的plain模型名(账单CSV只有plain名·无-0731后缀)."""
+    m = (model or "").lower()
+    return "deepseek-v4-pro" if "pro" in m else "deepseek-v4-flash"
+
+
+def _pricing_model_key_is_deepseek(model: str) -> bool:
+    """官方CSV model列匹配: plain名或-0731后缀都归入deepseek计费口径."""
+    m = (model or "").lower()
+    return m.startswith("deepseek-v4")
+
+
+def _load_official_csv_prices(force: bool = False):
+    """从官方账单CSV的price列解析(model→{hit,miss,output})¥/M价表; 返回(unified, peak). 缓存10分钟.
+    date>=2026-08-17的行按CST小时窗口分峰/谷; 其余行入统一价表. CSV不可读→(None, {})."""
+    import csv as _csv, glob as _glob
+    with _csv_price_lock:
+        now = time.time()
+        if not force and _csv_price_cache["unified"] and now - _csv_price_cache["loaded_at"] < 600:
+            return _csv_price_cache["unified"], _csv_price_cache["peak"]
+        unified: Dict[str, Dict[str, float]] = {}
+        peak: Dict[str, Dict[str, float]] = {}
+        for d in _CSV_PRICE_DIRS:
+            for path in sorted(_glob.glob(os.path.join(d, "amount-*.csv"))):
+                try:
+                    with open(path, newline="", encoding="utf-8") as f:
+                        for row in _csv.DictReader(f):
+                            model = (row.get("model") or "").strip()
+                            cat = _classify_price_type(row.get("type") or "")
+                            date = (row.get("start_time_iso") or "")[:10]
+                            if not _pricing_model_key_is_deepseek(model) or not cat or not date:
+                                continue
+                            try:
+                                yuan_per_m = float(row.get("price") or 0) * 1e6
+                            except ValueError:
+                                continue
+                            if yuan_per_m <= 0:
+                                continue
+                            key = _pricing_model_key(model)  # plain名·与fallback/lookup键一致
+                            if date >= "2026-08-17" and (row.get("time") or "").strip() in _CST_PEAK_HOURS:
+                                peak.setdefault(key, {})[cat] = yuan_per_m
+                            else:
+                                unified.setdefault(key, {})[cat] = yuan_per_m
+                except OSError:
+                    continue
+        if unified:
+            _csv_price_cache.update({"loaded_at": now, "unified": unified, "peak": peak})
+        return unified or None, peak
 
 
 def _pricing_now() -> tuple:
-    """当前时刻(CST)的计价口径: 返回 (regime, window)。
+    """当前时刻(CST)的计价窗口: 返回 (regime, window)。
     日期<生效日→legacy; 否则 CST 09-12/14-18=peak, 其余=valley。"""
     now = _dt.now(_CST)
     if now.strftime("%Y%m%d") < PEAK_VALLEY_EFFECTIVE:
@@ -468,29 +545,31 @@ def _pricing_now() -> tuple:
 
 
 def _compute_cost_yuan(model: str, cache_hit: int, cache_miss: int, out_tok: int):
-    """按 cache hit/miss 分价计算一次调用成本(¥)。
+    """官方CNY直读计价: 直接从官方账单CSV price列读¥/M(单一source of truth)。
 
-    20260817起: 峰谷双表(USD)×7.1; 之前: legacy价表(¥)÷7.2口径不变。
-    Returns: (cost_yuan, pricing_regime, window, fx)
+    hit/miss/out分档计价(hit不再与miss同价). Returns: (cost_yuan, pricing_regime, window, fx);
+    fx=FX_USD_CNY仅用于USD预算口径换算(_record_cost).
+    CSV管道不可读→8/16冻结官方价兜底(regime=official-csv-fallback·log WARNING).
     """
     regime, window = _pricing_now()
-    if regime == "peak_valley":
-        for k in ("deepseek-v4-pro", "deepseek-v4-flash"):
-            if k in model:
-                p = PEAK_VALLEY_PRICES_USD[k][window]
-                break
-        else:
-            p = PEAK_VALLEY_PRICES_USD["deepseek-v4-pro"][window]
-        cost_yuan = (cache_hit * p["hit"] + cache_miss * p["miss"] + out_tok * p["out"]) / 1e6 * FX_USD_CNY
-        return cost_yuan, regime, window, FX_USD_CNY
-    for k in ("deepseek-v4-pro", "deepseek-v4-flash"):
-        if k in model:
-            p = MODEL_PRICING_YUAN[k]
-            break
-    else:
-        p = MODEL_PRICING_YUAN["default"]
-    cost_yuan = (cache_hit * p["hit"] + cache_miss * p["miss"] + out_tok * p["output"]) / 1e6
-    return cost_yuan, "legacy", "valley", CNY_PER_USD
+    k = _pricing_model_key(model)  # plain名: 官方CSV计费口径
+    try:
+        unified, peak = _load_official_csv_prices()
+    except Exception:
+        unified, peak = None, {}
+    table = None
+    if regime == "peak_valley" and window == "peak" and peak.get(k):
+        table = peak[k]
+    if not table and unified and unified.get(k):
+        table = unified[k]
+    if not table:
+        table = _CSV_UNIFIED_FALLBACK[k]
+        logger.warning("official CSV prices unavailable; using frozen 8/16 prices for %s", k)
+        return ((cache_hit * table.get("hit", 0.0) + cache_miss * table.get("miss", 0.0)
+                 + out_tok * table.get("output", 0.0)) / 1e6, "official-csv-fallback", window, FX_USD_CNY)
+    cost_yuan = (cache_hit * table.get("hit", 0.0) + cache_miss * table.get("miss", 0.0)
+                 + out_tok * table.get("output", 0.0)) / 1e6
+    return cost_yuan, "official-csv", window, FX_USD_CNY
 
 
 def _safe_payload(body: dict, chosen_model: str) -> tuple[dict, list]:

@@ -1,3 +1,4 @@
+# v3.5.1-fix: R3
 """
 ModelRouter — 模型路由与降级链路 v2.2
 ====================================
@@ -124,6 +125,30 @@ class ModelRouter:
             return float(str(e.get("cost", "$999")).replace("$", "").split("/")[0])
         except (ValueError, IndexError):
             return 999.0
+
+    # R3: 跨provider模型存在性验证
+    PROVIDER_BASE_URLS = {
+        "deepseek": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        "token-plan": os.environ.get("TOKEN_PLAN_BASE_URL", "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"),
+        "novarouteai": os.environ.get("NOVAROUTE_BASE_URL", "https://novarouteai.com/v1"),
+    }
+
+    def _verify_model_exists(self, provider: str, model: str) -> bool:
+        """HTTP GET {base_url}/v1/models, 检查 data[].id 是否包含 model。超时3秒失败返回False。"""
+        import urllib.request
+        import json as _json
+        base = self.PROVIDER_BASE_URLS.get(provider, "").rstrip("/")
+        if not base:
+            return False
+        url = f"{base}/v1/models"
+        try:
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                data = _json.loads(resp.read().decode("utf-8", "ignore"))
+            ids = {item.get("id", "") for item in data.get("data", [])}
+            return model in ids
+        except Exception:
+            return False
+
     # 三 provider 故障转移（2026-08-10 实测均 200）:
     #   deepseek(api.deepseek.com):    deepseek-v4-pro/flash ✅
     #   token-plan(aliyuncs):          deepseek-v4-pro ✅ / flash ❌403
@@ -136,7 +161,7 @@ class ModelRouter:
         "ultra_light": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
-            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
@@ -144,14 +169,14 @@ class ModelRouter:
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "medium": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
@@ -159,35 +184,35 @@ class ModelRouter:
         "heavy": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "reasoning": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "code": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "cn_explain": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.3, "cost": "$0.14/$0.28"},
-            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
         "cn_creative": [
             {"model": "deepseek-v4-flash", "provider": "deepseek", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "deepseek-v4-flash", "provider": "novarouteai", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
-            {"model": "deepseek-v4-flash", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
+            {"model": "deepseek-v4-flash-0731", "provider": "token-plan", "credit": False, "quality": 0.7, "latency": 0.6, "cost": "$2.20/$8.80"},
             {"model": "qwen3.7-plus", "provider": "token-plan", "credit": False, "quality": 0.80, "latency": 0.5, "cost": "$0.05/$0.10"},
             {"model": "glm-5.2", "provider": "token-plan", "credit": False, "quality": 0.78, "latency": 0.55, "cost": "$0.08/$0.20"},
         ],
@@ -216,6 +241,22 @@ class ModelRouter:
         self._daily_budget = DEFAULT_DAILY_BUDGET
         # L2/L3→L1 反哺(2026-08-16 三层Loop): 经验约束总线(可选注入)
         self._feedback_bus = None
+        # v3.5 L1 独立第三方检查员: 路由前事件参数检查(可选注入, 便于测试)
+        self._event_checker = None
+        # R5: 路由切换审计
+        from lao.effect_anchored.routing.switch_audit import SwitchAuditor
+        self._switch_auditor = SwitchAuditor()
+
+    def with_event_checker(self, checker) -> "ModelRouter":
+        """注入自定义事件检查员(v3.5 L1·可测)。"""
+        self._event_checker = checker
+        return self
+
+    def _get_event_checker(self):
+        if self._event_checker is None:
+            from lao.effect_anchored.routing.event_checker import EventChecker
+            self._event_checker = EventChecker()
+        return self._event_checker
 
     def with_feedback_bus(self, bus) -> "ModelRouter":
         """注入反馈总线(L2锚点/L3确权经验 → 路由约束反哺)。
@@ -283,6 +324,7 @@ class ModelRouter:
         agent: str = "",              # 创始人 B 阶段: 按 Agent 绑定 provider
         task_text: str = "",          # v3.4: 真实任务文本(缓存感知·tier名直通时唯一语义信号)
         context_tokens: int = 0,      # v3.4: 估算上下文 token 数(大上下文缓存感知)
+        event: dict | None = None,    # v3.5: L1 检查员·路由前按目标模型白名单检查请求事件
     ) -> RouteSelection:
         """根据任务文本路由到最优模型。
 
@@ -297,6 +339,10 @@ class ModelRouter:
             agent: 创始人 B 阶段(2026-08-14) — 按 Agent 绑定 provider。
                 若 agent 绑定 token-plan(baron/ethan/momo) → 只在 token-plan 池选
                 否则 → 默认 deepseek 池。
+            event: v3.5 L1 独立第三方检查员 — Runtime 的请求事件 dict。
+                传入时在返回选路结果前按目标模型参数白名单检查：
+                PASS → 正常路由；MISSING_PARAMS → ValueError 明确告知缺什么参数；
+                REJECT → ValueError 直接拒绝(不给 LLM 浪费 Token)。
 
         Returns:
             RouteSelection 包含所选模型、provider、层级、成本和降级链路。
@@ -387,7 +433,9 @@ class ModelRouter:
             if _main_cost > _budget:
                 _force_flash = True
         if _force_flash:
-            _flash = [e for e in pool if e.get("model", "") == "deepseek-v4-flash"]
+            # 超预算降级: 匹配任意 deepseek flash(无后缀/带-0731均可), 三个 provider 都能降级
+            # (novarouteai/deepseek 用无后缀, token-plan 用-0731 → 不能只匹配单一后缀)
+            _flash = [e for e in pool if "deepseek-v4-flash" in e.get("model", "")]
             if _flash:
                 pool = _flash
 
@@ -413,10 +461,54 @@ class ModelRouter:
         else:
             # 三级选品: 安全 > 效率 > 成本 (创始人 2026-08-11 批准·非固定pool[0])
             primary = self.select_optimal(pool, tier, credit_mode=credit_mode)
+
+        # === v3.5 L1 独立第三方检查员: 交卷前按目标模型白名单检查事件 ===
+        # PASS → 正常返回选路; MISSING_PARAMS → 明确告知缺什么参数(非笼统报错);
+        # REJECT → 直接拒绝, 不给 LLM 浪费 Token。
+        if event is not None:
+            from lao.effect_anchored.routing.event_checker import CheckStatus
+            _check = self._get_event_checker().check_event(event, primary)
+            if _check.status is CheckStatus.MISSING_PARAMS:
+                raise ValueError(
+                    f"[route:EventChecker:MISSING_PARAMS] 模型 {_check.model_name} 缺少必需参数: "
+                    f"{', '.join(_check.missing_params)} — 请 Runtime 补齐后再路由"
+                )
+            if _check.status is CheckStatus.REJECT:
+                raise ValueError(
+                    f"[route:EventChecker:REJECT] 拒绝路由到 {_check.model_name}: {_check.reason}"
+                )
+
         gate = self.SAFETY_GATE.get(tier, 0.50)
         fallback_pool = [e for e in pool if float(e.get("quality", 0)) >= gate]
         fallbacks = [f"{e['provider']}/{e['model']}"
                      for e in fallback_pool if e != primary]
+
+        # R3: 验证主选模型存在性，失败时遍历fallback候选
+        _primary_verified = self._verify_model_exists(
+            primary.get("provider", ""), primary.get("model", ""))
+        if not _primary_verified:
+            _orig_primary = primary
+            for _fb in fallback_pool:
+                if _fb == primary:
+                    continue
+                if self._verify_model_exists(_fb.get("provider", ""), _fb.get("model", "")):
+                    primary = dict(_fb)
+                    fallbacks = [f"{e['provider']}/{e['model']}"
+                                 for e in fallback_pool if e != primary]
+                    # R5: 记录切换
+                    try:
+                        from lao.effect_anchored.routing.switch_audit import SwitchAuditEntry
+                        self._switch_auditor.record(SwitchAuditEntry(
+                            task_type=tier,
+                            from_provider=_orig_primary.get("provider", ""),
+                            from_model=_orig_primary.get("model", ""),
+                            to_provider=primary.get("provider", ""),
+                            to_model=primary.get("model", ""),
+                            reason="model_not_found_on_provider",
+                        ))
+                    except Exception:
+                        pass
+                    break
 
         selection = RouteSelection(
             task=task,
@@ -430,7 +522,20 @@ class ModelRouter:
         # L2→L1 兜底: 池过滤后仍命中规避名单(如全池被规避保底)→跳fallback
         if self._feedback_bus is not None and hasattr(self._feedback_bus, "apply_constraints"):
             try:
+                _before_provider = selection.provider
+                _before_model = selection.model
                 selection = self._feedback_bus.apply_constraints(selection)
+                # R5: 记录约束驱动的切换
+                if (selection.provider != _before_provider or selection.model != _before_model):
+                    from lao.effect_anchored.routing.switch_audit import SwitchAuditEntry
+                    self._switch_auditor.record(SwitchAuditEntry(
+                        task_type=tier,
+                        from_provider=_before_provider,
+                        from_model=_before_model,
+                        to_provider=selection.provider,
+                        to_model=selection.model,
+                        reason="feedback_bus_constraint",
+                    ))
             except Exception:
                 pass
         return selection
@@ -443,6 +548,7 @@ class ModelRouter:
         agent: str = "",              # 创始人 B 阶段: 按 Agent 绑定 provider
         task_text: str = "",          # v3.4: 真实任务文本(缓存感知)
         context_tokens: int = 0,      # v3.4: 估算上下文 token 数
+        event: dict | None = None,    # v3.5: L1 检查员·路由前事件参数检查
     ) -> RouteSelection:
         """考虑预算约束的路由(成本红线·T1 真实启用)。
 
@@ -461,7 +567,8 @@ class ModelRouter:
             RouteSelection，预算约束下最优选择。
         """
         return self.route(task, budget=budget, agent=agent,
-                          task_text=task_text, context_tokens=context_tokens)
+                          task_text=task_text, context_tokens=context_tokens,
+                          event=event)
 
     def explain_route(self, selection: RouteSelection) -> str:
         """生成人类可读的路由解释。

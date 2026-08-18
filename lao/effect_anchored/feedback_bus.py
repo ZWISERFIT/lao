@@ -1,3 +1,4 @@
+# v3.5.1-fix: R4/R1/A1-A3
 """
 Feedback Bus — LAO 2.7 P0-① 步骤③
 =================================
@@ -131,6 +132,12 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
         # LAO v3.1 P0-18: 内嵌三层认知系统(CognitiveSystem)
         from lao.effect_anchored.cognitive_engine import CognitiveSystem
         self.cognitive = CognitiveSystem()
+        # R1: TimeoutMatrix集成
+        try:
+            from lao.effect_anchored.routing.timeout_matrix import TimeoutMatrix
+            self._timeout_matrix = TimeoutMatrix()
+        except Exception:
+            self._timeout_matrix = None
         if state_path:
             self._load_state()
             # 自动升级接线: 错误事件 → (证据≥阈值) → 锚点 + 路由约束
@@ -199,7 +206,7 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
 
     @staticmethod
     def _default_error_anchor(event: "FeedbackEvent", evidence_count: int):
-        """默认错误锚点构造: DecisionAnchor(防复发·可被锚点库淘汰收敛)。"""
+        """默认错误锚点构造: DecisionAnchor(防复发·可被锚点库淘汰收敛)。A1-A3: 自动生成FixturePair。"""
         import hashlib as _hl
         from lao.effect_anchored.cognitive_anchor import make_decision_anchor
         p = event.payload or {}
@@ -221,6 +228,21 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
         # 证据计数入 value: readiness 判定(trigger_count)可读·确权可审计
         if isinstance(anchor.value, dict):
             anchor.value["evidence_count"] = int(evidence_count)
+        # A1-A3: 自动生成 FixturePair 并关联到锚点
+        try:
+            from lao.effect_anchored.validation.fixture_pair import FixturePair
+            pair_id = f"fp-{fp}"
+            _fp = FixturePair(
+                pair_id=pair_id,
+                anchor_id=anchor.anchor_id,
+                bad_path_context={"provider": provider, "model": model,
+                                  "error_signature": sig},
+                valid_path_context={"provider": provider, "model": model,
+                                    "error_signature": ""},
+            )
+            anchor.fixture_pair_id = _fp.pair_id
+        except Exception:
+            pass
         return anchor
 
     # -- 事件入总线 ---------------------------------------------------------
@@ -240,6 +262,29 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
         self._dispatch_cognitive(event)
         self._maybe_auto_promote(event)
         self._conflict_avoidance(event)
+        # R1: route_result事件 → timeout_matrix judge → 自动emit冲突事件
+        if event.event_type == "route_result" and self._timeout_matrix is not None:
+            try:
+                p = event.payload or {}
+                mode = str(p.get("mode") or p.get("tier") or p.get("task_type") or "default")
+                elapsed = float(p.get("elapsed_ms") or p.get("latency_ms") or 0)
+                if elapsed > 0:
+                    verdict = self._timeout_matrix.judge(mode, elapsed)
+                    if verdict["action"] in ("slow", "fallback"):
+                        self.emit(FeedbackEvent(
+                            event_type="conflict",
+                            source="timeout_matrix",
+                            payload={
+                                "provider": str(p.get("provider") or ""),
+                                "model": str(p.get("model") or ""),
+                                "error_signature": f"timeout:{verdict['action']}:{mode}",
+                                "detail": f"elapsed={elapsed}ms action={verdict['action']}",
+                                "timeout_verdict": verdict,
+                            },
+                            severity="critical" if verdict["action"] == "fallback" else "warning",
+                        ))
+            except Exception:
+                pass
         if event.event_type in ("error", "conflict", "conflict_resolution"):
             self._save_state()
         for key in (event.event_type, "*"):
@@ -462,12 +507,14 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
                          "502", "503", "504", "connection")
 
     def capture_route_result(self, provider: str, model: str, success: bool,
-                             error: Optional[str] = None) -> FeedbackEvent:
+                             error: Optional[str] = None,
+                             usage_present: bool = True) -> FeedbackEvent:
         """记录一次路由调用结果（成功/失败），供经验萃取。
 
         Loop 闭环(2026-08-16):
         - error_signature 归一(错误前120字符): 认知层计数与自动升级同键
         - 403/超时/限流等冲突型错误 → 追加 conflict 事件(即时路由避让)
+        - R4: usage_present=False → emit error 事件(usage缺失故障信号)
         """
         sig = (error or "")[:120] or f"{provider}/{model} unspecified-error"
         evt = FeedbackEvent(
@@ -489,6 +536,15 @@ class FeedbackBus(_FeedbackBusImmunityMixin):
                              "detail": str(error)[:200]},
                     severity="critical",
                 ))
+        # R4: usage缺失故障信号
+        if not usage_present:
+            self.emit(FeedbackEvent(
+                event_type="error", source="l1_router",
+                payload={"provider": provider, "model": model,
+                         "error_signature": f"usage_missing:{provider}/{model}",
+                         "detail": "usage field absent in response"},
+                severity="warning",
+            ))
         return evt
 
     # -- 诊断 ---------------------------------------------------------------

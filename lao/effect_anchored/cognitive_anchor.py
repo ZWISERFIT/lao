@@ -1,3 +1,4 @@
+# v3.5.1-fix: A1-A3
 """
 Cognitive Anchor Framework — LAO 2.7 P0-①
 =========================================
@@ -50,6 +51,7 @@ class Anchor:
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     tags: List[str] = field(default_factory=list)
     trust_weight: float = 1.0   # 0.0-1.0, >=0.8 视为 Tier0 永固
+    fixture_pair_id: Optional[str] = None   # A1-A3: 关联的回归重放夹具对ID
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
