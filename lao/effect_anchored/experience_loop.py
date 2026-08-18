@@ -228,11 +228,8 @@ class ExperienceLoop:
                          ) -> Optional[Dict[str, Any]]:
         """W3: 经验直答·pre-route 匹配(2026-08-19 创始人令·LAO接线)。
 
-        从已确权经验库(anchor_store)匹配任务文本:
-          - 命中决策/认知锚点(query 匹配)
-          - trust_weight >= 0.8(置信度阈值)
-          - 已确权(confirm_experiences 确认链中无 awaiting_consent)
-        返回 {"answer": str, "confidence": float, "experience_key": str} 或 None。
+        创始人 03:01 令: 接入认知系统 L2.taste(短期品味) —— 经验匹配时
+        用认知检索辅助排序(高品味匹配的经验优先)。
         """
         try:
             if not task_text:
@@ -240,6 +237,15 @@ class ExperienceLoop:
             matched = self.anchor_store.query(task_text)
             if not matched:
                 return None
+            # 创始人 03:01 令: L2.taste 认知品味加权(匹配经验按认知品味重排)
+            try:
+                _taste = self.bus.cognitive.L2.taste(task_text)
+                if _taste and _taste > 0:
+                    matched.sort(
+                        key=lambda a: float(a.get("trust_weight", 0) or 0) * (1 + _taste),
+                        reverse=True)
+            except Exception:
+                pass  # 认知品味失败不影响基础匹配
             best = matched[0]
             tw = float(best.get("trust_weight", 0) or 0)
             if tw < 0.8:
@@ -370,6 +376,16 @@ class ExperienceLoop:
         # 创始人修正2(2026-08-19): L3确权 → L2动态参数更新 → L1命中率提升
         # (C-2 缺陷修复: 确权产物反哺路由约束·闭环补全)
         self._l3_feedback_route_params(cur)
+        # 创始人 03:01 令: L3.judge 长期判断 + L1.on_success 经验复利(确权成功)
+        try:
+            self.bus.cognitive.L3.judge(
+                f"经验确权确认: {domain} confidence={cur.get('trust_weight', 0)}")
+        except Exception:
+            pass
+        try:
+            self.bus.cognitive.L1.on_success(aid, delta=0.3)  # 确权成功 → 经验复利
+        except Exception:
+            pass
         return {"anchor_id": aid, "domain": domain, "attestation": attestation,
                 "asset_id": asset.asset_id}
 
