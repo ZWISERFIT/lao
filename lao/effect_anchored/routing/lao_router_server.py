@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # v3.5.1-fix: R5
 # v3.5.1-glm: R5
+# v3.5.1-wiring: W1-W9 (2026-08-19 创始人令·LAO三环节接线: 入站萃取W1/W2/W2.5 + 经验直答W3 + 出站验证W4/W5/W6/W7 + 全链路W8 + L3经验闭环W9)
 """
 lao-router — LAO 成本优化 OpenAI 兼容代理 (方案A·9Agent共用)
 =============================================================================
@@ -45,6 +46,12 @@ from lao.effect_anchored.routing.cost_intelligence import SavingsEngine
 # B2(2026-08-16 RIS审计修复): RIS 健康门——LAO 真正消费 ris-bridge/ris_summary,
 # provider 被 RIS 判定 down/isolated 时阻断并降级切换(成本事故链路从"注释"变"阻断")
 from lao.effect_anchored.routing.ris_health_gate import RISHealthGate
+from lao.effect_anchored.context_rebuilder import ContextRebuilder, Event as CRB_Event  # v3.5.1-wiring: W1
+from lao.effect_anchored.memory_anchor import MemoryAnchor  # v3.5.1-wiring: W2
+from lao.effect_anchored.cognitive_system import DeterministicCognitiveSystem  # v3.5.1-wiring: W2.5
+from lao.effect_anchored.hallucination_gate import HallucinationGate  # v3.5.1-wiring: W4
+from lao.effect_anchored.reality_check import RealityCheckEngine  # v3.5.1-wiring: W5
+from lao.effect_anchored.user_fact_base import UserFactBase  # v3.5.1-wiring: W5
 
 # ── 配置 ─────────────────────────────────────────────
 PORT = int(os.environ.get("LAO_ROUTER_PORT", "8765"))
@@ -173,6 +180,45 @@ SIGNAL_WINDOW_SIZE = 50
 
 # ── B2/B5: RIS 健康门(LAO 消费 RIS 桥·阻断被隔离/掉线的 provider) ──
 ris_gate = RISHealthGate()
+
+# ── W1: 入站萃取·ContextRebuilder 接线(2026-08-19 创始人令·LAO接线) ──
+# 记录每次请求事件 → 上下文重建证据链。初始化失败不阻塞路由(fail-open)。
+try:
+    CONTEXT_REBUILDER = ContextRebuilder(session_id="lao-router")
+except Exception as _crb_e:
+    CONTEXT_REBUILDER = None
+    logger.warning(f"ContextRebuilder 未启用: {_crb_e}")
+
+# ── W2: 入站萃取·MemoryAnchor 认知锚定(2026-08-19 创始人令·LAO接线) ──
+try:
+    ANCHOR_MEMORY = MemoryAnchor()
+except Exception as _anch_e:
+    ANCHOR_MEMORY = None
+    logger.warning(f"MemoryAnchor 未启用: {_anch_e}")
+
+# ── W2.5: 入站萃取·CognitiveSystem 认知模式匹配(2026-08-19 Shuyu追加) ──
+try:
+    COGNITIVE = DeterministicCognitiveSystem()
+except Exception as _cog_e:
+    COGNITIVE = None
+    logger.warning(f"CognitiveSystem 未启用: {_cog_e}")
+
+# ── W4: 出站验证·HallucinationGate(2026-08-19 创始人令·LAO接线) ──
+try:
+    HALL_GATE = HallucinationGate()
+except Exception as _hg_e:
+    HALL_GATE = None
+    logger.warning(f"HallucinationGate 未启用: {_hg_e}")
+
+# ── W5: 出站验证·RealityCheck + UserFactBase 组合(2026-08-19 创始人令·LAO接线) ──
+try:
+    REALITY = RealityCheckEngine()
+except Exception as _rl_e:
+    REALITY = None
+try:
+    FACTS = UserFactBase()
+except Exception as _ft_e:
+    FACTS = None
 
 # ── 三层Loop(2026-08-16 创始人令): L2经验工厂→L3确权→反哺L1 命中率/免疫 ──
 # ExperienceLoop 持久化锚点库+反馈总线+确权链, route 结果回流(错误复利),
@@ -767,6 +813,82 @@ def _model_quality(model: str, tier: str) -> float:
     return 0.0
 
 
+
+
+# ── W6: 退回 LLM 重推理机制(2026-08-19 创始人令·LAO接线·max 2次) ─────────
+async def _rethink_and_revalidate(client, payload, resp, task_text, tier, agent,
+                                  max_retries=2):
+    """出站验证失败 → 追加修正指令重新请求 LLM（最多 max_retries 次）。
+
+    Args:
+        client: OpenAI client 实例。
+        payload: 原始请求 payload(dict)。
+        task_text: 任务文本。
+        tier: 任务层级。
+        agent: agent 标识。
+        max_retries: 最大重推理次数(默认 2)。
+
+    Returns:
+        (resp, validation_result): (最终响应, 验证标记 dict)。
+        validation_result: {"lao_validation": "passed"|"repaired_after_N"|"failed_after_retries",
+                            "retries": int, "violations": list}
+    """
+    import copy as _copy
+    retries = 0
+    violations = []
+    _validation_result = {"lao_validation": "passed", "retries": 0, "violations": []}
+    while True:
+        # 验证当前内容
+        _content = ""
+        try:
+            _content = resp.choices[0].message.content or ""
+        except Exception:
+            _content = str(resp)
+        _passed = True
+        _vios = []
+        if HALL_GATE is not None:
+            try:
+                _hr = HALL_GATE.check(_content, context={"task": task_text, "tier": tier, "agent": agent or ""})
+                if _hr is not None and not getattr(_hr, "passed", True):
+                    _passed = False
+                    _vios = list(getattr(_hr, "anchors_violated", []) or [])
+            except Exception:
+                pass
+        if REALITY is not None:
+            try:
+                _ev_cnt = 0
+                _kw = 0
+                if FACTS is not None:
+                    _facts = FACTS.query_facts(agent or "unknown", limit=10)
+                    _ft = " ".join(str(f) for f in _facts)
+                    _kw = sum(1 for _w in _ft.split() if _w and _w in _content)
+                    _ev_cnt = min(len(_facts), 5)
+                _rev = REALITY.evaluate(answer_id="rethink", evidence_count=_ev_cnt,
+                                        trusted_sources=1, unknown_assumptions=0,
+                                        experience_keys=[], keyword_matches=_kw)
+                if getattr(_rev, "verification_state", None) == "unverified" \
+                        and float(getattr(_rev, "confidence_score", 0) or 0) < 50:
+                    _passed = False
+            except Exception:
+                pass
+        if _passed:
+            _validation_result = {"lao_validation": ("repaired_after_%d_retries" % retries) if retries else "passed",
+                                  "retries": retries, "violations": _vios}
+            return resp, _validation_result
+        if retries >= max_retries:
+            _validation_result = {"lao_validation": "failed_after_retries",
+                                  "retries": retries, "violations": _vios}
+            return resp, _validation_result
+        # 追加修正指令 → 重新请求
+        retries += 1
+        violations = _vios
+        _fix = {"role": "user",
+                "content": "【LAO验证反馈】上轮回复存在事实偏差: %s。请修正后重新回答。" % ("; ".join(_vios) if _vios else "内容与已知事实不符")}
+        _payload2 = _copy.deepcopy(payload)
+        _msgs = list(_payload2.get("messages", [])) + [_fix]
+        _payload2["messages"] = _msgs
+        resp = await asyncio.to_thread(client.chat.completions.create, **_payload2)
+
 def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
                     chosen_model: str, provider: str, sel: RouteSelection, budget: float,
                     in_tok: int, out_tok: int, cache_hit: int, cache_miss: int,
@@ -860,6 +982,53 @@ async def chat_completions(request: Request):
     # 按 Agent 分发独立 key(治本·B1)·创始人 B 阶段: 先提取 agent 供路由绑定 provider
     agent = _extract_agent(model_hint, dict(request.headers))
 
+    # v3.5.1-wiring: W1 入站萃取·请求事件记录(上下文重建证据链)
+    if CONTEXT_REBUILDER is not None:
+        try:
+            CONTEXT_REBUILDER.record(CRB_Event(
+                event_id=uuid.uuid4().hex[:12],
+                timestamp=_dt.now(_tzone.utc).isoformat(),
+                speaker=agent or "unknown",
+                event_type="request",
+                subject=tier or model_hint or "chat",
+                summary=str(messages[-1].get("content", ""))[:5000] if messages else "",
+                anchor_keys=[tier] if tier else [],
+            ))
+        except Exception:
+            pass  # fail-open·不阻塞路由
+
+    # v3.5.1-wiring: W2 认知锚定·查询历史认知注入 context
+    if ANCHOR_MEMORY is not None:
+        try:
+            _task_text = ""
+            if messages:
+                _last = messages[-1].get("content", "")
+                _task_text = _last if isinstance(_last, str) else str(_last)
+            _anchor_key = None
+            for _kw in ("创始人", "门店", "预算", "用户", "基础设施"):
+                if _kw in _task_text:
+                    _anchor_key = _kw
+                    break
+            if _anchor_key:
+                _mres = ANCHOR_MEMORY.lookup(_anchor_key)
+                if _mres.found:
+                    context = locals().get("context", {})
+                    context["memory_anchor"] = {"found": True, "value": _mres.value, "anchor_key": _anchor_key}
+        except Exception:
+            pass  # fail-open·不阻塞路由
+
+    # v3.5.1-wiring: W2.5 认知模式匹配·影响 W3 经验直答双重确认
+    _cognitive_match = None
+    if COGNITIVE is not None:
+        try:
+            _task_text = ""
+            if messages:
+                _last = messages[-1].get("content", "")
+                _task_text = _last if isinstance(_last, str) else str(_last)
+            _cognitive_match = COGNITIVE.match_cognitive_pattern(agent or "unknown", _task_text)
+        except Exception:
+            _cognitive_match = None  # fail-open
+
     # L1 命中率修复(2026-08-16): 真实任务文本+上下文规模 → 缓存感知路由激活
     # (旧实现只传 tier 名 → 缓存感知分支生产恒不激活·死代码)
     def _msg_text(ml: List[Dict]) -> str:
@@ -874,6 +1043,40 @@ async def chat_completions(request: Request):
     _total_chars = sum(len(str(m.get("content", ""))) for m in messages if isinstance(m, dict))
     context_tokens = int(_total_chars * 0.75)  # CJK≈1字1token·ASCII≈4字1token 的折中估算
     session_fp = _session_fingerprint(messages)
+
+    # v3.5.1-wiring: W3 经验直答·双重确认(经验匹配 + 认知匹配 才全短路·省100%成本)
+    _exp_match = None
+    if LOOP is not None and task_text:
+        try:
+            _exp_match = LOOP.match_experience(task_text, tier=tier, agent=agent or "")
+        except Exception:
+            _exp_match = None  # fail-open
+    if _exp_match is not None and _exp_match.get("confidence", 0) >= 0.8:
+        if _cognitive_match is not None:
+            # 双重确认 → 全短路·直接返回经验答案(不请求 LLM·省 100% 成本)
+            _answer = _exp_match.get("answer", "")
+            return JSONResponse({
+                "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": model_hint or "lao-experience",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": _answer},
+                             "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                "lao_validation": {"source": "experience_shortcircuit",
+                                    "experience_key": _exp_match.get("experience_key", ""),
+                                    "confidence": _exp_match.get("confidence", 0)},
+            })
+        # 半短路: 经验命中但无认知匹配 → 附加到 messages 提精度(继续请求 LLM)
+        try:
+            _exp_hint = (f"【LAO经验参考】历史确权经验: {_exp_match.get('answer', '')}"
+                         f" (confidence={_exp_match.get('confidence', 0):.2f})")
+            if messages and isinstance(messages[-1], dict):
+                _c = messages[-1].get("content", "")
+                if isinstance(_c, str):
+                    messages[-1]["content"] = _c + "\n\n" + _exp_hint
+        except Exception:
+            pass
 
     # ② 成本红线路由(用已算好的 tier 而非把 model 名当 task·根治 Nova 根因1)
     budget = _remaining_budget()
@@ -962,10 +1165,18 @@ async def chat_completions(request: Request):
         def _sse_gen():
             nonlocal stream_usage
             status, err = "ok", ""
+            _acc_content = []  # v3.5.1-wiring: W7 累积流式内容供出站验证
             try:
                 for chunk in resp:   # OpenAI Stream 迭代(Starlette 在线程池中迭代本生成器)
                     # 保留 OpenAI SSE 格式
                     yield "data: " + chunk.model_dump_json() + "\n\n"
+                    # 累积内容(W7 验证用)
+                    try:
+                        _d = chunk.choices[0].delta.content
+                        if _d:
+                            _acc_content.append(str(_d))
+                    except Exception:
+                        pass
                     # 流末尾 chunk 带 usage(含 cache)·提取真实命中率数据
                     cu = getattr(chunk, "usage", None)
                     if cu is not None:
@@ -973,6 +1184,19 @@ async def chat_completions(request: Request):
                         stream_usage["output"] = getattr(cu, "completion_tokens", 0) or 0
                         stream_usage["hit"] = getattr(cu, "prompt_cache_hit_tokens", 0) or 0
                         stream_usage["miss"] = getattr(cu, "prompt_cache_miss_tokens", 0) or 0
+                # v3.5.1-wiring: W7 流式出站验证(累积内容·只标记不重推理)
+                _full = "".join(_acc_content)
+                _vios = []
+                if HALL_GATE is not None and _full:
+                    try:
+                        _hr = HALL_GATE.check(_full, context={"task": task_text, "tier": tier, "agent": agent or ""})
+                        if _hr is not None and not getattr(_hr, "passed", True):
+                            _vios = list(getattr(_hr, "anchors_violated", []) or [])
+                    except Exception:
+                        pass
+                if _vios:
+                    import json as _json
+                    yield f"data: {_json.dumps({'lao_validation': {'passed': False, 'violations': _vios}})}" + "\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
                 status, err = "error", str(e)[:200]
@@ -1009,6 +1233,58 @@ async def chat_completions(request: Request):
         stream=stream, latency_ms=latency_ms, cap_events=cap_events,
         session_fp=session_fp,
     )
+
+    # v3.5.1-wiring: W4 出站验证·非流式(转发后·返回前)
+    _validation = None
+    if HALL_GATE is not None:
+        try:
+            _content = ""
+            try:
+                _content = resp.choices[0].message.content or ""
+            except Exception:
+                _content = str(resp)
+            _validation = HALL_GATE.check(
+                _content, context={"task": task_text, "tier": tier, "agent": agent or ""})
+            if _validation is not None and not getattr(_validation, "passed", True):
+                # 验证失败 → 标记(重推理在 W6 补全)
+                resp = resp  # 保留原始响应·W6 将在此处接入重推理
+                _validation_failed = True
+            else:
+                _validation_failed = False
+        except Exception:
+            _validation_failed = False  # fail-open
+
+    # v3.5.1-wiring: W5 出站验证·RealityCheck+UserFactBase(第二层)
+    _reality_state = None
+    if REALITY is not None and _validation_failed is False:
+        try:
+            _ev_cnt = 0
+            _kw_matches = 0
+            if FACTS is not None:
+                _facts = FACTS.query_facts(agent or "unknown", limit=10)
+                _facts_text = " ".join(str(f) for f in _facts)
+                if _facts_text:
+                    _kw_matches = sum(1 for _w in _facts_text.split() if _w and _w in _content)
+                _ev_cnt = min(len(_facts), 5)
+            _rev = REALITY.evaluate(
+                answer_id=request_id, evidence_count=_ev_cnt, trusted_sources=1,
+                unknown_assumptions=0, experience_keys=[], keyword_matches=_kw_matches)
+            _reality_state = getattr(_rev, "verification_state", None)
+            _conf = float(getattr(_rev, "confidence_score", 0) or 0)
+            if _reality_state == "unverified" and _conf < 50:
+                _validation_failed = True  # 无事实支撑 → 标记(重推理 W6)
+        except Exception:
+            pass  # fail-open
+
+    # v3.5.1-wiring: W6 验证失败 → 退回 LLM 重推理(max 2 次·非流式)
+    if _validation_failed:
+        try:
+            _rr = await _rethink_and_revalidate(
+                client, payload, resp, task_text, tier, agent or "", max_retries=2)
+            resp, _val_mark = _rr
+            # 重推理后更新验证标记(不改变响应结构·仅附加元信息)
+        except Exception as _rr_e:
+            logger.warning(f"W6 重推理失败: {_rr_e}")
 
     return resp
 

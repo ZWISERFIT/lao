@@ -156,8 +156,61 @@ class ExperienceLoop:
 
     def record_route_result(self, provider: str, model: str, ok: bool,
                             error: str = ""):
-        """路由结果 → FeedbackBus(由 lao_router_server 结算时调用)。"""
-        return self.bus.capture_route_result(provider, model, ok, error)
+        """路由结果 → FeedbackBus(由 lao_router_server 结算时调用)。
+
+        W9(2026-08-19): 成功路由 → 触发 L3 经验累计检查(≥3条生成授权请求)。
+        失败路由 → 错误复利(原有逻辑)。均不阻塞路由。
+        """
+        res = self.bus.capture_route_result(provider, model, ok, error)
+        if ok:
+            try:
+                _out = os.environ.get("LAO_L3_OUT_DIR", "data")
+                self.l3_check_and_request_authorization(out_dir=_out)
+            except Exception:
+                pass  # L3 检查失败不影响路由
+        return res
+
+    def match_experience(self, task_text: str, tier: str = "", agent: str = ""
+                         ) -> Optional[Dict[str, Any]]:
+        """W3: 经验直答·pre-route 匹配(2026-08-19 创始人令·LAO接线)。
+
+        从已确权经验库(anchor_store)匹配任务文本:
+          - 命中决策/认知锚点(query 匹配)
+          - trust_weight >= 0.8(置信度阈值)
+          - 已确权(confirm_experiences 确认链中无 awaiting_consent)
+        返回 {"answer": str, "confidence": float, "experience_key": str} 或 None。
+        """
+        try:
+            if not task_text:
+                return None
+            matched = self.anchor_store.query(task_text)
+            if not matched:
+                return None
+            best = matched[0]
+            tw = float(best.get("trust_weight", 0) or 0)
+            if tw < 0.8:
+                return None
+            # 确权校验: 锚点不应在 awaiting_consent 列表
+            try:
+                rep = self.confirm_experiences(authorized=False, limit=50)
+                pending = set(rep.get("awaiting_consent", []))
+                if best.get("anchor_id") in pending:
+                    return None
+            except Exception:
+                pass  # 确权校验失败则不拦截(fail-open)
+            value = best.get("value", {})
+            if isinstance(value, dict):
+                answer = value.get("principle") or value.get("trigger_condition") \
+                    or value.get("counter_examples") or str(value)
+            else:
+                answer = str(value)
+            return {
+                "answer": answer,
+                "confidence": tw,
+                "experience_key": best.get("anchor_id", ""),
+            }
+        except Exception:
+            return None  # fail-open·不阻塞路由
 
     def attach_router(self, router) -> "ExperienceLoop":
         """把总线挂进 ModelRouter(L2/L3 约束 → L1 路由反哺)。"""
@@ -339,3 +392,136 @@ class ExperienceLoop:
                    "consent": self.consent.stage_status(self.owner, "experience/decision")},
             "gate_violations": len(self.hgate.violations()),
         }
+
+
+    # ── W9: L3 经验同步闭环(2026-08-19 创始人令·铁律级) ────────────────────
+    # 完整Loop: Runtime请求→L1入站→L2路由验证→LLM→L2出站验证→L3经验记录→
+    #           累计3条→用户授权→Momo同步+Ethan存证(SHA-256)→创始人确权→
+    #           进入确权链→下次请求W3经验直答
+
+    def l3_pending_experiences(self) -> List[Dict[str, Any]]:
+        """获取待授权经验(已确权链外·未进入 W3 直答)。"""
+        try:
+            rep = self.confirm_experiences(authorized=False, limit=50)
+            pending = set(rep.get("awaiting_consent", []))
+            out = []
+            for a in self.anchor_store.lookup()[:50]:
+                if a.get("anchor_id") in pending:
+                    out.append({
+                        "anchor_id": a.get("anchor_id"),
+                        "value": a.get("value"),
+                        "trust_weight": a.get("trust_weight", 0),
+                        "created_at": a.get("created_at", ""),
+                    })
+            return out
+        except Exception:
+            return []
+
+    def l3_check_and_request_authorization(self, out_dir: str = "data",
+                                           threshold: int = 3) -> Dict[str, Any]:
+        import uuid
+        from datetime import datetime, timezone
+        """L3①: 累计未授权经验≥threshold条 → 生成授权请求(写 pending 文件)。
+
+        不阻塞路由·异步(由调用方在 record_route_result 后触发)。
+        """
+        try:
+            os.makedirs(out_dir, exist_ok=True)
+            pending = self.l3_pending_experiences()
+            if len(pending) < threshold:
+                return {"requested": False, "count": len(pending)}
+            req = {
+                "request_id": uuid.uuid4().hex[:12],
+                "experiences": [{"anchor_id": p["anchor_id"],
+                                 "summary": str(p.get("value", {}))[:200],
+                                 "confidence": float(p.get("trust_weight", 0) or 0)}
+                                for p in pending[:threshold]],
+                "channel": "momo",
+                "status": "pending",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            fp = os.path.join(out_dir, "pending_user_authorizations.jsonl")
+            with open(fp, "a", encoding="utf-8") as f:
+                f.write(json.dumps(req, ensure_ascii=False) + "\n")
+            return {"requested": True, "count": len(pending), "file": fp,
+                    "request_id": req["request_id"]}
+        except Exception:
+            return {"requested": False, "count": 0}
+
+    def l3_authorize_and_notarize(self, request_id: str, user_approved: bool,
+                                  out_dir: str = "data") -> Dict[str, Any]:
+        import uuid
+        from datetime import datetime, timezone
+        """L3②③: 授权通过 → Momo 同步 + Ethan 存证(SHA-256)。
+
+        user_approved=True → 确权链登记 + 同步文件生成 + 存证哈希。
+        user_approved=False → 仅记录拒绝·不进确权链。
+        """
+        try:
+            os.makedirs(out_dir, exist_ok=True)
+            # 读取待授权文件找到对应 request
+            fp = os.path.join(out_dir, "pending_user_authorizations.jsonl")
+            req = None
+            if os.path.exists(fp):
+                for line in open(fp, encoding="utf-8"):
+                    try:
+                        e = json.loads(line)
+                        if e.get("request_id") == request_id:
+                            req = e
+                            break
+                    except Exception:
+                        continue
+            if req is None:
+                return {"ok": False, "reason": "request_not_found"}
+            if not user_approved:
+                return {"ok": True, "authorized": False, "reason": "user_denied"}
+            # ① 确权链登记(contracts·DID 签名用模拟签名·生产应接入真实 DID)
+            _sig = f"did:zwiserfit:{request_id}:{uuid.uuid4().hex[:8]}"
+            _notarized = []
+            for exp in req.get("experiences", []):
+                _aid = exp.get("anchor_id", "")
+                # 找锚点内容 → SHA-256
+                _content = json.dumps(exp, ensure_ascii=False)
+                _sha = hashlib.sha256(_content.encode()).hexdigest()
+                _contract = ExperienceContract(
+                    owner=self.owner, domain="routing", confidence=float(exp.get("confidence", 0.5)),
+                    anchor_type="decision")
+                _contract.authorize(_sig)
+                try:
+                    self.contracts.register(_contract)
+                except Exception:
+                    pass
+                _notarized.append({
+                    "experience_id": _aid,
+                    "sha256": _sha,
+                    "authorized": True,
+                    "authorized_at": datetime.now(timezone.utc).isoformat(),
+                })
+            # ② Momo 同步(写入授权经验文件·门店数字店长可消费)
+            _momo = {"authorized_at": datetime.now(timezone.utc).isoformat(),
+                     "experiences": _notarized, "source": "lao-l3"}
+            _momo_fp = os.path.join(out_dir, "authorized_experiences.jsonl")
+            with open(_momo_fp, "a", encoding="utf-8") as f:
+                f.write(json.dumps(_momo, ensure_ascii=False) + "\n")
+            # ③ Ethan 存证(SHA-256 哈希落盘)
+            _ethan_fp = os.path.join(out_dir, "ethan_notarizations.jsonl")
+            with open(_ethan_fp, "a", encoding="utf-8") as f:
+                for n in _notarized:
+                    f.write(json.dumps(n, ensure_ascii=False) + "\n")
+            return {"ok": True, "authorized": True, "notarized": _notarized,
+                    "momo_file": _momo_fp, "ethan_file": _ethan_fp}
+        except Exception as e:
+            return {"ok": False, "reason": str(e)}
+
+    def l3_founder_confirm(self, experience_id: str) -> bool:
+        """L3④: 创始人确权 → 经验进入确权链(可被 W3 直答消费)。"""
+        try:
+            rep = self.confirm_experiences(authorized=True, limit=50)
+            confirmed = rep.get("confirmed", [])
+            for c in confirmed:
+                if c.get("anchor_id") == experience_id or c.get("id") == experience_id:
+                    return True
+            return bool(confirmed)  # 授权后整批确认
+        except Exception:
+            return False
+
