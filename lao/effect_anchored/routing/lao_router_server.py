@@ -836,7 +836,8 @@ async def _rethink_and_revalidate(client, payload, resp, task_text, tier, agent,
     import copy as _copy
     retries = 0
     violations = []
-    _validation_result = {"lao_validation": "passed", "retries": 0, "violations": []}
+    _retry_usage_total = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}  # P1-9: 重试usage累计
+    _validation_result = {"lao_validation": "passed", "retries": 0, "violations": [], "retry_usage": _retry_usage_total}
     while True:
         # 验证当前内容
         _content = ""
@@ -873,11 +874,13 @@ async def _rethink_and_revalidate(client, payload, resp, task_text, tier, agent,
                 pass
         if _passed:
             _validation_result = {"lao_validation": ("repaired_after_%d_retries" % retries) if retries else "passed",
-                                  "retries": retries, "violations": _vios}
+                                  "retries": retries, "violations": _vios,
+                                  "retry_usage": _retry_usage_total}
             return resp, _validation_result
         if retries >= max_retries:
             _validation_result = {"lao_validation": "failed_after_retries",
-                                  "retries": retries, "violations": _vios}
+                                  "retries": retries, "violations": _vios,
+                                  "retry_usage": _retry_usage_total}
             return resp, _validation_result
         # 追加修正指令 → 重新请求
         retries += 1
@@ -888,6 +891,15 @@ async def _rethink_and_revalidate(client, payload, resp, task_text, tier, agent,
         _msgs = list(_payload2.get("messages", [])) + [_fix]
         _payload2["messages"] = _msgs
         resp = await asyncio.to_thread(client.chat.completions.create, **_payload2)
+        # P1-9: 累计重试 usage(真实花费入账)
+        try:
+            _ru = getattr(resp, "usage", None)
+            if _ru is not None:
+                _retry_usage_total["prompt_tokens"] += int(getattr(_ru, "prompt_tokens", 0) or 0)
+                _retry_usage_total["completion_tokens"] += int(getattr(_ru, "completion_tokens", 0) or 0)
+                _retry_usage_total["total_tokens"] += int(getattr(_ru, "total_tokens", 0) or 0)
+        except Exception:
+            pass
 
 def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
                     chosen_model: str, provider: str, sel: RouteSelection, budget: float,
@@ -1055,6 +1067,24 @@ async def chat_completions(request: Request):
         if _cognitive_match is not None:
             # 双重确认 → 全短路·直接返回经验答案(不请求 LLM·省 100% 成本)
             _answer = _exp_match.get("answer", "")
+            # P1-10 修复(2026-08-19): 短路落观察事件(证据链可观测)+认知层经验复利
+            try:
+                await asyncio.to_thread(_log_event, {
+                    "type": "experience_shortcircuit",
+                    "request_id": request_id, "agent": agent or "unknown",
+                    "tier": tier, "model": model_hint or "lao-experience",
+                    "experience_key": _exp_match.get("experience_key", ""),
+                    "confidence": _exp_match.get("confidence", 0),
+                    "cost_saved": "100%", "latency_ms": int((time.time() - started) * 1000),
+                })
+            except Exception:
+                pass
+            try:
+                if LOOP is not None and hasattr(LOOP.bus, "cognitive"):
+                    LOOP.bus.cognitive.L1.on_success(
+                        _exp_match.get("experience_key", ""), delta=0.3)
+            except Exception:
+                pass
             return JSONResponse({
                 "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
                 "object": "chat.completion",
@@ -1284,7 +1314,20 @@ async def chat_completions(request: Request):
             _rr = await _rethink_and_revalidate(
                 client, payload, resp, task_text, tier, agent or "", max_retries=2)
             resp, _val_mark = _rr
-            # 重推理后更新验证标记(不改变响应结构·仅附加元信息)
+            # P1-9 修复(2026-08-19): 重试真实花费入账(预算红线+证据链)
+            _ru = _val_mark.get("retry_usage") or {}
+            if _ru.get("total_tokens"):
+                try:
+                    await asyncio.to_thread(
+                        _settle_and_log,
+                        request_id=request_id, tier=tier, agent=agent, model_hint=model_hint,
+                        chosen_model=chosen_model, provider=chosen_provider, sel=sel, budget=budget,
+                        in_tok=_ru.get("prompt_tokens", 0), out_tok=_ru.get("completion_tokens", 0),
+                        cache_hit=0, cache_miss=0, stream=False, status="retry",
+                        error=_val_mark.get("lao_validation", ""),
+                        latency_ms=0, cap_events=cap_events, session_fp=session_fp)
+                except Exception as _se:
+                    logger.warning(f"W6 重试记账失败: {_se}")
         except Exception as _rr_e:
             logger.warning(f"W6 重推理失败: {_rr_e}")
 

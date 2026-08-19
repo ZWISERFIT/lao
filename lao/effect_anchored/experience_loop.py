@@ -255,23 +255,38 @@ class ExperienceLoop:
             if not matched:
                 return None
             # 创始人 03:01 令: L2.taste 认知品味加权(匹配经验按认知品味重排)
+            # P1-5 修复(2026-08-19): 原实现乘全局常数不改变顺序·改为
+            # per-anchor 相关分(锚点关键词对 task_text 命中数) x (1+taste)
             try:
-                _taste = self.bus.cognitive.L2.taste(task_text)
-                if _taste and _taste > 0:
-                    matched.sort(
-                        key=lambda a: float(a.get("trust_weight", 0) or 0) * (1 + _taste),
-                        reverse=True)
+                _taste = float(self.bus.cognitive.L2.taste(task_text) or 0)
+                _q = (task_text or "").lower()
+                def _rel_score(a: Dict[str, Any]) -> float:
+                    _v = a.get("value")
+                    _txt = ""
+                    if isinstance(_v, dict):
+                        _txt = " ".join(str(x) for x in
+                                         (_v.get("trigger_condition"), _v.get("principle"),
+                                          _v.get("action_rule")) if x)
+                    _txt = _txt.lower()
+                    # 关键词命中数(2-char 中文窗 + 英文词)
+                    _hits = sum(1 for _tok in _q.split() if _tok and _tok in _txt)
+                    _bigrams = {_q[i:i+2] for i in range(len(_q)-1) if _q[i:i+2].strip()}
+                    _hits += sum(1 for _bg in _bigrams if _bg in _txt)
+                    return float(a.get("trust_weight", 0) or 0) * (1.0 + min(_taste, 1.0)) * (1.0 + min(_hits, 5))
+                matched.sort(key=_rel_score, reverse=True)
             except Exception:
                 pass  # 认知品味失败不影响基础匹配
             best = matched[0]
             tw = float(best.get("trust_weight", 0) or 0)
             if tw < 0.8:
                 return None
-            # 确权校验: 锚点不应在 awaiting_consent 列表
+            # 确权校验: 锚点不应在 awaiting_consent 列表·且不应 gate_failed(幻觉门失败)
+            # P1-6 修复(2026-08-19): 排除幻觉门失败锚点(避免直答幻觉)
             try:
                 rep = self.confirm_experiences(authorized=False, limit=50)
                 pending = set(rep.get("awaiting_consent", []))
-                if best.get("anchor_id") in pending:
+                gate_failed = set(rep.get("gate_failed", []))
+                if best.get("anchor_id") in pending or best.get("anchor_id") in gate_failed:
                     return None
             except Exception:
                 pass  # 确权校验失败则不拦截(fail-open)
@@ -401,6 +416,14 @@ class ExperienceLoop:
             pass
         try:
             self.bus.cognitive.L1.on_success(aid, delta=0.3)  # 确权成功 → 经验复利
+        except Exception:
+            pass
+        # P1-11 修复(2026-08-19): 确权达 Tier0(trust_weight>=阈值) → 注册永固锚点
+        try:
+            _tw = float(cur.get("trust_weight", 0) or 0)
+            if _tw >= float(getattr(self.bus.cognitive, "_policy", None) and
+                            getattr(self.bus.cognitive._policy, "tier0_threshold", 0.8) or 0.8):
+                self.bus.cognitive.register_unalterable(aid)
         except Exception:
             pass
         return {"anchor_id": aid, "domain": domain, "attestation": attestation,
@@ -642,18 +665,32 @@ class ExperienceLoop:
             if req is None:
                 return {"ok": False, "reason": "request_not_found"}
             if not user_approved:
+                # P0-3 补充: 拒绝结果落盘·同批经验不再重复请求(幂等闭环)
+                try:
+                    _denied_fp = os.path.join(out_dir, "denied_authorizations.jsonl")
+                    with open(_denied_fp, "a", encoding="utf-8") as _f:
+                        _f.write(json.dumps(req, ensure_ascii=False) + "\n")
+                except Exception:
+                    pass
                 return {"ok": True, "authorized": False, "reason": "user_denied"}
             # ① 确权链登记(contracts·DID 签名用模拟签名·生产应接入真实 DID)
             _sig = f"did:zwiserfit:{request_id}:{uuid.uuid4().hex[:8]}"
             _notarized = []
+            # P1-8 修复: 哈希绑定锚点完整 value(非摘要)·domain/anchor_type 取真实字段
+            _anchor_by_id = {str(a.get("anchor_id")): a for a in self.anchor_store.lookup()[:200]}
             for exp in req.get("experiences", []):
                 _aid = exp.get("anchor_id", "")
-                # 找锚点内容 → SHA-256
-                _content = json.dumps(exp, ensure_ascii=False)
+                _cur = _anchor_by_id.get(str(_aid), {})
+                # 找锚点完整内容 → SHA-256(绑定真实 value·摘要相同内容不同不可冒充)
+                _content = json.dumps(_cur, ensure_ascii=False, sort_keys=True) \
+                    if _cur else json.dumps(exp, ensure_ascii=False)
                 _sha = hashlib.sha256(_content.encode()).hexdigest()
+                _anchor_type = str(_cur.get("anchor_type", "decision"))
+                _domain = f"experience/{_anchor_type}"
                 _contract = ExperienceContract(
-                    owner=self.owner, domain="routing", confidence=float(exp.get("confidence", 0.5)),
-                    anchor_type="decision")
+                    owner=self.owner, domain=_domain,
+                    confidence=float(exp.get("confidence", 0.5)),
+                    anchor_type=_anchor_type)
                 _contract.authorize(_sig)
                 try:
                     self.contracts.register(_contract)
@@ -664,6 +701,7 @@ class ExperienceLoop:
                     "sha256": _sha,
                     "authorized": True,
                     "authorized_at": datetime.now(timezone.utc).isoformat(),
+                    "domain": _domain,
                 })
             # ② Momo 同步(写入授权经验文件·门店数字店长可消费)
             _momo = {"authorized_at": datetime.now(timezone.utc).isoformat(),
@@ -682,14 +720,19 @@ class ExperienceLoop:
             return {"ok": False, "reason": str(e)}
 
     def l3_founder_confirm(self, experience_id: str) -> bool:
-        """L3④: 创始人确权 → 经验进入确权链(可被 W3 直答消费)。"""
+        """L3④: 创始人确权单条经验 → 进入确权链(可被 W3 直答消费)。
+
+        P1-7 修复(2026-08-19): 原实现 limit=50 整批确权+未命中返回 True。
+        改为精确匹配单条确权·未命中返回 False。
+        """
         try:
-            rep = self.confirm_experiences(authorized=True, limit=50)
-            confirmed = rep.get("confirmed", [])
-            for c in confirmed:
-                if c.get("anchor_id") == experience_id or c.get("id") == experience_id:
-                    return True
-            return bool(confirmed)  # 授权后整批确认
+            _target = self.anchor_store.lookup()[:200]
+            _cur = next((a for a in _target if str(a.get("anchor_id")) == str(experience_id)), None)
+            if _cur is None:
+                return False
+            # 单条确权(精确·不走整批)
+            _ok = self._confirm_one(_cur, self.owner)
+            return bool(_ok and _ok.get("anchor_id"))
         except Exception:
             return False
 

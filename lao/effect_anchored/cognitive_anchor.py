@@ -35,6 +35,7 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional
 import hashlib
 import json
+import threading  # P1-12: 并发写保护
 from datetime import datetime, timezone
 
 
@@ -142,6 +143,7 @@ class CognitiveAnchorStore:
         self._path = store_path
         self._max_anchors = max(1, int(max_anchors))
         self._max_history = max(1, int(max_history))
+        self._lock = threading.Lock()  # P1-12: 并发写保护(asyncio.to_thread 多线程)
         if store_path:
             self._load()
 
@@ -338,8 +340,12 @@ class CognitiveAnchorStore:
     def _save(self) -> None:
         import os
         os.makedirs(os.path.dirname(self._path), exist_ok=True) if os.path.dirname(self._path) else None
-        with open(self._path, "w") as f:
-            json.dump(self._anchors, f, ensure_ascii=False, indent=2)
+        # P1-12: 原子写(tmp+os.replace)·防并发写损坏
+        _tmp = f"{self._path}.tmp"
+        with self._lock:
+            with open(_tmp, "w") as f:
+                json.dump(self._anchors, f, ensure_ascii=False, indent=2)
+            os.replace(_tmp, self._path)
 
 
 # ---------------------------------------------------------------------------
