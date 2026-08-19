@@ -311,6 +311,41 @@ class CognitiveAnchorStore:
             return None
         return entry["hash"] == content_hash
 
+    # ------------------------------------------------------------------
+    # P1 出站检查 (2026-08-19 · 产品规格 v1.0 1.1 Step2 · Stella 修正1: 新建方法)
+    # ------------------------------------------------------------------
+
+    def predict_cache_hit(self, trigger: str) -> Dict:
+        """预测该 trigger 是否命中缓存(新建方法·Stella 修正 1)。
+
+        逻辑:
+            - query(trigger) 返回锚点 → 有历史 → 预测命中
+            - 无锚点 → 预测不命中
+            - 锚点 trust_weight 均值 ≥ 0.6 → 高置信
+
+        Returns:
+            {"cache_hit": bool, "confidence": float, "anchors": int}
+
+        fail-open: 任何异常返回 {"cache_hit": False, "confidence": 0.0, "anchors": 0}。
+        """
+        try:
+            hits = self.query(trigger)
+            if not hits:
+                return {"cache_hit": False, "confidence": 0.0, "anchors": 0}
+            trusts = []
+            for h in hits:
+                v = h.get("value") if isinstance(h.get("value"), dict) else {}
+                trusts.append(float(v.get("trust_weight", h.get("trust_weight", 0.0)) or 0.0))
+            avg_trust = sum(trusts) / len(trusts) if trusts else 0.0
+            confidence = min(avg_trust, 1.0)
+            return {
+                "cache_hit": True,
+                "confidence": round(confidence, 4),
+                "anchors": len(hits),
+            }
+        except Exception:
+            return {"cache_hit": False, "confidence": 0.0, "anchors": 0}
+
     def stats(self) -> Dict[str, Any]:
         """容量/分层统计(缓存空间收敛可观测)。"""
         by_type: Dict[str, int] = {}

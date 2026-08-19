@@ -72,6 +72,54 @@ class RecoveryBudget:
         self.state = STATE_ESCALATED
         self.pivot_reason += " | human_approved"
 
+    # ------------------------------------------------------------------
+    # P1 LAO 出站检查 (2026-08-19 · 产品规格 v1.0 1.1 Step3)
+    # ------------------------------------------------------------------
+
+    def check_budget(self, expected_cost: float = 0.0) -> Dict:
+        """Step3 成本红线: 预算内 → 通过 · 超预算 → 建议降级。
+
+        Args:
+            expected_cost: 本次请求期望成本(元·由 CostIntelligence.expected_cost 给出)。
+
+        Returns:
+            {"status": "ok"/"overrun", "budget_remaining": float,
+             "suggest_downgrade": bool, "detail": str}
+
+        fail-open: 任何异常返回 ok 不抛。
+        """
+        try:
+            remaining = 0.0
+            if self.max_cost:
+                remaining = max(self.max_cost - self.total_cost, 0.0)
+                overrun = (remaining < expected_cost) or (
+                    self.total_cost + expected_cost > self.max_cost
+                )
+            else:
+                # 未设成本上限 → 不阻塞
+                return {
+                    "status": "ok",
+                    "budget_remaining": -1.0,   # 无上限
+                    "suggest_downgrade": False,
+                    "detail": "no cost cap configured",
+                }
+            if overrun:
+                return {
+                    "status": "overrun",
+                    "budget_remaining": round(remaining, 4),
+                    "suggest_downgrade": True,
+                    "detail": f"expected_cost={expected_cost:.4f} > remaining={remaining:.4f}",
+                }
+            return {
+                "status": "ok",
+                "budget_remaining": round(remaining, 4),
+                "suggest_downgrade": False,
+                "detail": f"expected_cost={expected_cost:.4f} within budget",
+            }
+        except Exception:
+            return {"status": "ok", "budget_remaining": -1.0,
+                    "suggest_downgrade": False, "detail": "fail-open"}
+
 
 
 
