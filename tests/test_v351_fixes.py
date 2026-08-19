@@ -112,12 +112,18 @@ def test_r5_switch_auditor_called_on_degrade():
 
 
 def test_r5_switch_auditor_not_called_without_degrade():
-    """Primary model verified -> no fallback switch -> record not called."""
+    """Primary model verified + 配额正常 → 无切换 → record 不调用。
+
+    2026-08-19 更新: 配额感知(token-plan 耗尽)会触发 quota_exhausted audit·
+    属预期新行为。此测试用配额正常的场景验证"无降级不记录"。
+    """
     router = ModelRouter()
-    with patch.object(router, "_verify_model_exists", return_value=True):
-        with patch.object(router._switch_auditor, "record") as mock_record:
-            router.route("light")
-            assert not mock_record.called
+    # 模拟 token-plan 配额正常(直接可用) → 无配额剔除 → 无 audit
+    with patch.object(router, "_check_provider_quota", return_value=True):
+        with patch.object(router, "_verify_model_exists", return_value=True):
+            with patch.object(router._switch_auditor, "record") as mock_record:
+                router.route("light")
+                assert not mock_record.called
 
 
 # ---------------------------------------------------------------------------

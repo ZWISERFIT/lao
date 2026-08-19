@@ -18,6 +18,7 @@ from ris.events import RuntimeHealthEvent
 class RecoveryAction:
     """一次恢复动作(可注入·由调用方实现具体恢复)。"""
     name: str
+    diagnose_fn: Optional[Callable[[], Dict[str, Any]]] = None  # P0-1: 前置诊断(读日志→根因)
     recover_fn: Optional[Callable[[], bool]] = None      # 执行恢复→成功?
     verify_fn: Optional[Callable[[], bool]] = None       # 验证恢复成功?
     max_attempts: int = 3                                # 恢复 budget(不无限循环)
@@ -75,6 +76,21 @@ class RecoveryEngine:
         # ② Classify
         result.classified = classify_fn() if classify_fn else event_type
         result.detail["detect"] = f"{result.classified} detected"
+
+        # ②.5 P0-1 前置诊断(2026-08-19 Shuyu审定·外部案例C):
+        # 先读日志定位根因 → 再决定恢复动作·不盲目重试
+        # (根治今日"RIS报14300次gateway_down但从不恢复"漏洞)
+        if action is not None and action.diagnose_fn is not None:
+            try:
+                _diag = action.diagnose_fn() or {}
+                result.detail["diagnosis"] = _diag
+                # 诊断明确"无需重启/根因非进程" → 跳过恢复(不盲目重试)
+                if _diag.get("skip_recovery"):
+                    result.detail["reason"] = (
+                        f"diagnosis_skip: {_diag.get('reason', 'no restart needed')}")
+                    return result
+            except Exception as _exc:
+                result.detail["diagnosis"] = {"error": str(_exc)}
 
         # ③ Recover + ④ Verify(循环·有 budget)
         if action is None:

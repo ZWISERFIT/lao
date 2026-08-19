@@ -384,6 +384,39 @@ class RecoveryExecutor:
         def detect() -> bool:
             return _find_pid("gateway --port 18789") is None
 
+        def diagnose() -> Dict[str, Any]:
+            """P0-1 前置诊断: 读 gateway 最近日志定位根因·不盲目重启。"""
+            diag: Dict[str, Any] = {"root_cause": "unknown", "skip_recovery": False}
+            try:
+                # 读 user 级 gateway 服务最近日志(最后40行)
+                out = subprocess.run(
+                    ["journalctl", "--user", "-u", "openclaw-gateway.service",
+                     "-n", "40", "--no-pager"],
+                    timeout=10, capture_output=True, text=True)
+                logs = out.stdout[-3000:] if out.stdout else ""
+                # 根因分类(关键词匹配·V/E分级)
+                if "OutOfMemory" in logs or "heap" in logs.lower() or "ENOMEM" in logs:
+                    diag["root_cause"] = "oom"
+                elif "EADDRINUSE" in logs or "address already in use" in logs.lower():
+                    diag["root_cause"] = "port_conflict"
+                elif "SyntaxError" in logs or "TypeError" in logs or "Error:" in logs:
+                    diag["root_cause"] = "code_error"
+                elif "429" in logs or "quota" in logs.lower() or "rate limit" in logs.lower():
+                    diag["root_cause"] = "quota_exhausted"
+                    # 配额耗尽 → 重启无用(外部额度问题) → 跳过盲目重启
+                    diag["skip_recovery"] = True
+                    diag["reason"] = "quota/429: restart won't help external quota"
+                elif not logs.strip():
+                    diag["root_cause"] = "no_logs"
+                    diag["skip_recovery"] = True
+                    diag["reason"] = "no logs: avoid blind restart"
+                else:
+                    diag["root_cause"] = "unknown_crash"
+                return diag
+            except Exception as exc:
+                diag["diagnose_error"] = str(exc)
+                return diag
+
         def recover() -> bool:
             try:
                 subprocess.run(["systemctl", "--user", "restart", "openclaw-gateway.service"],
@@ -399,6 +432,7 @@ class RecoveryExecutor:
             "gateway_down", "gateway",
             detect_fn=detect, classify_fn=lambda: "gateway_down",
             action=RecoveryAction(name="restart_openclaw_gateway",
+                                  diagnose_fn=diagnose,
                                   recover_fn=recover, verify_fn=verify,
                                   max_attempts=3),
         )
