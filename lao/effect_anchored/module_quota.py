@@ -103,3 +103,28 @@ class ModuleQuota:
                 "global_spent": round(sum(self._spent.values()), 4),
                 "global_limit": self.global_limit,
             }
+
+    # ------------------------------------------------------------------
+    # 护栏3(2026-08-19 Stella审核): per-module 配额 = 历史峰值日均 × 150% 裕度
+    # (不可设均值·否则误伤峰值→降级→命中率↓)。超大模块单独配额。
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def suggest_limit_from_history(avg_daily: float, peak_daily: float) -> float:
+        """按历史峰值日均 × 150% 裕度 建议模块配额(护栏3)。
+
+        Args:
+            avg_daily: 历史平均日花费(元)。
+            peak_daily: 历史峰值日花费(元)。
+
+        Returns:
+            建议配额 = max(peak_daily, avg_daily) × 1.5(150% 裕度)。
+            peak_daily 不可得(<=0) → 用 avg_daily × 1.5(同裕度)。
+        """
+        try:
+            base = max(avg_daily, peak_daily, 0.0)
+            if base <= 0:
+                return 0.0
+            return round(base * 1.5, 2)
+        except (TypeError, ValueError):
+            return 0.0

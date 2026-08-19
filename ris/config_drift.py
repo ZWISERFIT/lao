@@ -236,6 +236,18 @@ class ConfigDriftWatcher:
                 current["bind"] = _h.sha256(
                     str(gw_bind).encode("utf-8")).hexdigest()[:16]
 
+            # 护栏4(2026-08-19 Stella审核): 白名单优先·合法变更自动放行
+            # authorized_changes: {field: [合法指纹]}·由调用方在确认合法后
+            # (如经 gateway config.patch 审批或 Tristan/Stella 手动确认)写入。
+            authorized = state.get("openclaw_authorized", {})
+            if authorized:
+                # 合法字段指纹 → 并入基线(自动放行·不告警)
+                for field, fps in authorized.items():
+                    if isinstance(fps, list) and baseline.get(field) in fps:
+                        pass  # 该字段基线已是合法指纹
+                    elif isinstance(fps, list) and current.get(field) in fps:
+                        baseline[field] = current[field]  # 视为基线·放行
+
             # 首轮建立基线(不告警)
             if not baseline:
                 state["openclaw_critical"] = current

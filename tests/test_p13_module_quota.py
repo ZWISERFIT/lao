@@ -59,3 +59,26 @@ class TestSummary:
         s = q.summary()
         assert s["modules"]["router"]["spent"] == 3.0
         assert s["global_spent"] == 3.0
+
+
+class TestGuardrail3:
+    """护栏3: 配额 = 历史峰值日均 × 150% 裕度(不可设均值·防误伤峰值)"""
+
+    def test_suggest_from_peak(self):
+        # 峰值日均 10·均值 5 → 建议 = max(10) × 1.5 = 15
+        limit = ModuleQuota.suggest_limit_from_history(avg_daily=5.0, peak_daily=10.0)
+        assert limit == 15.0
+
+    def test_suggest_falls_back_to_avg(self):
+        # 无峰值数据 → 用均值 × 1.5(同裕度)
+        limit = ModuleQuota.suggest_limit_from_history(avg_daily=8.0, peak_daily=0.0)
+        assert limit == 12.0
+
+    def test_peak_not_under_quota(self):
+        """峰值日均不超过配额(裕度保护峰值)"""
+        limit = ModuleQuota.suggest_limit_from_history(avg_daily=5.0, peak_daily=10.0)
+        assert limit >= 10.0  # 峰值在配额内
+
+    def test_peak_alone_not_below_avg(self):
+        limit = ModuleQuota.suggest_limit_from_history(avg_daily=20.0, peak_daily=10.0)
+        assert limit >= 20.0  # 至少覆盖均值

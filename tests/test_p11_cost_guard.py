@@ -37,12 +37,25 @@ class TestLevelProgression:
         assert r["action"] == "throttle"
         assert r["allowed"] is True
 
-    def test_level3_kill(self):
-        """≥100% → 熔断(拒绝)"""
-        g = CostGuard(budget_limit=100.0)
-        g.record_spend(105.0)  # 105%
-        r = g.check()
-        assert r["level"] == 3
+    def test_level3_kill_limited_and_diagnosed(self):
+        """护栏1: Kill 仅限指定模块 + 前置诊断确认死循环"""
+        # 非 kill_modules → 降级 Throttle(不拒正常流量)
+        g0 = CostGuard(budget_limit=100.0, name="normal-module")
+        g0.record_spend(105.0)
+        assert g0.check()["allowed"] is True
+        assert g0.check()["action"] == "throttle"
+
+        # kill_modules 但无诊断 → 降级 Throttle(防误 Kill 正常峰值)
+        g1 = CostGuard(budget_limit=100.0, name="loop-module",
+                       kill_modules=frozenset({"loop-module"}))
+        g1.record_spend(105.0)
+        assert g1.check()["action"] == "throttle"
+
+        # kill_modules + 诊断确认死循环 → Kill
+        g2 = CostGuard(budget_limit=100.0, name="loop-module",
+                       kill_modules=frozenset({"loop-module"}))
+        g2.record_spend(105.0)
+        r = g2.check(diagnose={"root_cause": "dead_loop"})
         assert r["action"] == "kill"
         assert r["allowed"] is False
 
@@ -85,3 +98,20 @@ class TestPerModule:
         g_a.record_spend(95.0)
         assert g_a.level() == 2
         assert g_b.level() == 0  # module-b 不受影响
+
+
+class TestGuardrail2:
+    """护栏2: Throttle 只动降级层·heavy/reasoning/code 宁贵勿错"""
+
+    def test_non_degradable_no_throttle(self):
+        g = CostGuard(budget_limit=100.0, name="reasoning", degradable=False)
+        g.record_spend(95.0)  # 95% → 本应 Throttle
+        r = g.check()
+        assert r["action"] != "throttle"  # 不降级
+        assert r["allowed"] is True  # 宁贵勿错·仍放行
+
+    def test_degradable_throttles(self):
+        g = CostGuard(budget_limit=100.0, name="ul_light", degradable=True)
+        g.record_spend(95.0)
+        r = g.check()
+        assert r["action"] == "throttle"

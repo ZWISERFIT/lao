@@ -33,19 +33,26 @@ class CostGuard:
     def __init__(self, budget_limit: float, alert_pct: float = DEFAULT_ALERT_PCT,
                  throttle_pct: float = DEFAULT_THROTTLE_PCT,
                  kill_pct: float = DEFAULT_KILL_PCT,
-                 name: str = "default"):
+                 name: str = "default",
+                 kill_modules: Optional[frozenset] = None,
+                 degradable: bool = True):
         """初始化成本护栏。
 
         Args:
             budget_limit: 预算上限(元·period 内)。
-            alert_pct/throttle_pct/kill_pct: 三级阈值百分比(默认70/90/100)。
+            alert_pct/throttle_pct/kill_pct: 三级阈值百分比(默认70/90/100·须实测校准)。
             name: 护栏名称(per-module 隔离·P1-3 支持)。
+            kill_modules: 允许 Kill 的模块名集合(护栏1·防止全局熔断)。
+                        None = 默认禁止全局 Kill·仅 Throttle/Alert。
+            degradable: 是否允许降级(护栏2·heavy/reasoning/code 设 False·宁贵勿错)。
         """
         self.budget_limit = max(budget_limit, 0.01)
         self.alert_pct = alert_pct
         self.throttle_pct = throttle_pct
         self.kill_pct = kill_pct
         self.name = name
+        self.kill_modules = kill_modules or frozenset()
+        self.degradable = degradable
         self._spent = 0.0
         self._lock = threading.Lock()
 
@@ -69,8 +76,15 @@ class CostGuard:
         with self._lock:
             return self._level()
 
-    def check(self, expected_cost: float = 0.0) -> Dict[str, Any]:
+    def check(self, expected_cost: float = 0.0,
+              diagnose: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """检查本次调用是否被允许(基于当前级别+预计成本)。
+
+        Args:
+            expected_cost: 本次调用预计成本(元)。
+            diagnose: 前置诊断结果(护栏1·P0-1联动)。
+                Kill 前必须确认是死循环(root_cause=loop/duplicate)·
+                正常峰值流量(root_cause=peak) → 不 Kill·保命中率。
 
         Returns:
             {"level": 0-3, "allowed": bool, "action": str,
@@ -79,20 +93,49 @@ class CostGuard:
             level 0: allowed=True  · action=normal
             level 1: allowed=True  · action=alert(记录)
             level 2: allowed=True  · action=throttle(建议降级flash·限频)
-            level 3: allowed=False · action=kill(熔断·拒绝新调用)
+            level 3: allowed=False · action=kill(仅限指定死循环模块·非全局)
+
+        护栏1: Kill 绝不允许全局熔断。仅 name ∈ kill_modules 且
+            前置诊断确认为死循环时才 Kill·否则降级为 Throttle。
+        护栏2: degradable=False(heavy/reasoning/code) → 不 Throttle 降级。
         """
         try:
             with self._lock:
                 lvl = self._level()
                 pct = self._spent / self.budget_limit * 100.0 if self.budget_limit else 0.0
+
+            # 护栏1: Kill 仅限指定模块 + 前置诊断确认死循环
             if lvl >= 3:
+                is_killable = self.name in self.kill_modules
+                is_loop = bool(diagnose and diagnose.get("root_cause") in
+                               ("loop", "duplicate", "dead_loop"))
+                if not is_killable:
+                    # 非 kill_modules → 降级为 Throttle(不拒正常流量·保命中率)
+                    return {"level": 2, "allowed": True, "action": "throttle",
+                            "spent": round(self._spent, 4),
+                            "budget_limit": self.budget_limit, "pct": round(pct, 2),
+                            "note": "kill_limited_to_modules"}
+                if not is_loop and not diagnose:
+                    # 无诊断 → 不能确认死循环 → 降级 Throttle(防误 Kill 正常峰值)
+                    return {"level": 2, "allowed": True, "action": "throttle",
+                            "spent": round(self._spent, 4),
+                            "budget_limit": self.budget_limit, "pct": round(pct, 2),
+                            "note": "kill_requires_diagnosis"}
                 return {"level": 3, "allowed": False, "action": "kill",
                         "spent": round(self._spent, 4),
                         "budget_limit": self.budget_limit, "pct": round(pct, 2)}
+
+            # 护栏2: degradable=False → 不 Throttle 降级(宁贵勿错·命中率生命线)
             if lvl >= 2:
+                if not self.degradable:
+                    return {"level": 2, "allowed": True, "action": "alert",
+                            "spent": round(self._spent, 4),
+                            "budget_limit": self.budget_limit, "pct": round(pct, 2),
+                            "note": "non_degradable_tier_throttle_held"}
                 return {"level": 2, "allowed": True, "action": "throttle",
                         "spent": round(self._spent, 4),
                         "budget_limit": self.budget_limit, "pct": round(pct, 2)}
+
             if lvl >= 1:
                 return {"level": 1, "allowed": True, "action": "alert",
                         "spent": round(self._spent, 4),

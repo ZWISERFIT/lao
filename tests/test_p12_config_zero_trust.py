@@ -72,6 +72,36 @@ class TestDetectOpenclawCritical:
         events = w.detect_openclaw_critical()
         assert events == []
 
+    def test_authorized_change_auto_approved(self):
+        """护栏4: 白名单(合法变更)自动放行·不误拦"""
+        w = _make_watcher()
+        w.detect_openclaw_critical()  # 建基线
+
+        # 记录某合法变更的指纹为已授权
+        tmp_cfg = os.path.join(tempfile.mkdtemp(), "openclaw.json")
+        with open(w.OPENCLAW_CONFIG, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        cfg["gateway"]["bind"] = "tailnet"  # 合法变更(经审批)
+        with open(tmp_cfg, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
+        w.OPENCLAW_CONFIG = tmp_cfg
+
+        # 先检测一次(应告警) → 拿到指纹后授权
+        events = w.detect_openclaw_critical()
+        assert len([e for e in events if e.detail.get("field") == "bind"]) == 1
+
+        # 手动授权该变更(白名单)
+        state = w._load_json(w.state_file)
+        import hashlib
+        bind_fp = hashlib.sha256(b"tailnet").hexdigest()[:16]
+        state["openclaw_authorized"] = {"bind": [bind_fp]}
+        with open(w.state_file, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+        # 更新基线到当前?(授权后重新检测不应告警)
+        w.detect_openclaw_critical()
+        events2 = w.detect_openclaw_critical()
+        assert len([e for e in events2 if e.detail.get("field") == "bind"]) == 0
+
     def test_fail_open(self):
         """读取失败 → 空列表不误报"""
         w = _make_watcher()
