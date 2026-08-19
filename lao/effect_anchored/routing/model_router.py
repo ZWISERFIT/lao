@@ -516,6 +516,32 @@ class ModelRouter:
         except Exception:
             pass  # fail-open
 
+    def _emit_route_feedback(self, selection) -> None:
+        """路由决策后 emit l1_router 事件到 FeedbackBus(飞轮数据源)。
+
+        l3_feedback_to_bridge 依赖 bus._events 中的 l1_router 事件
+        (provider/model/success)生成 lao_feedback.route_stats。
+        fail-open: 未注入 bus / 异常 → 静默跳过。
+        """
+        try:
+            bus = getattr(self, "_feedback_bus", None)
+            if bus is None:
+                return
+            from lao.effect_anchored.feedback_bus import FeedbackEvent
+            bus.emit(FeedbackEvent(
+                event_type="route_result",
+                source="l1_router",
+                payload={
+                    "provider": selection.provider,
+                    "model": selection.model,
+                    "tier": selection.tier,
+                    "success": True,
+                    "cost": 0.0,
+                },
+            ))
+        except Exception:
+            pass  # fail-open
+
     def _consume_ris_bridge(self) -> None:
         """消费 ris-bridge.json → provider 黑名单 + 恢复经验灌入(任务1)。
 
@@ -900,6 +926,7 @@ class ModelRouter:
         # === 2026-08-20 Founder 01:05 令·数据飞轮接线(任务2):
         # 路由决策后反哺 ris-bridge.json lao_feedback 段(RIS→LAO→RIS 闭环)
         # fail-open: 任何异常跳过·绝不阻塞路由·不改变请求结构·不降命中率 ===
+        self._emit_route_feedback(selection)
         self._feedback_to_bridge()
         return selection
 
