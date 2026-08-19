@@ -207,8 +207,25 @@ class ExperienceLoop:
             from datetime import datetime, timezone
             os.makedirs(out_dir, exist_ok=True)
             fp = os.path.join(out_dir, "agent_runtime_experiences.jsonl")
+            # P0-3: 幂等去重 — 读已同步 anchor_id 水位·只 append 增量
+            _synced_ids: set = set()
+            if os.path.exists(fp):
+                try:
+                    for _line in open(fp, encoding="utf-8"):
+                        try:
+                            _prev = _json.loads(_line)
+                            _aid = _prev.get("anchor_id")
+                            if _aid:
+                                _synced_ids.add(str(_aid))
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
             _n = 0
             for a in anchors:
+                _aid = str(a.get("anchor_id") or "")
+                if _aid and _aid in _synced_ids:
+                    continue  # 已同步·跳过
                 _rec = {
                     "anchor_id": a.get("anchor_id"),
                     "experience_type": "agent_runtime",
@@ -549,6 +566,39 @@ class ExperienceLoop:
             pending = self.l3_pending_experiences()
             if len(pending) < threshold:
                 return {"requested": False, "count": len(pending)}
+            # P0-3: 授权请求幂等 — 按 pending 集合指纹去重·同批经验不重复请求
+            _fp = os.path.join(out_dir, "pending_user_authorizations.jsonl")
+            _fp_denied = os.path.join(out_dir, "denied_authorizations.jsonl")
+            _pending_ids = sorted(str(p["anchor_id"]) for p in pending[:threshold])
+            _fp_hash = hashlib.sha256("|".join(_pending_ids).encode()).hexdigest()[:16]
+            _seen: set = set()
+            if os.path.exists(_fp):
+                try:
+                    for _line in open(_fp, encoding="utf-8"):
+                        try:
+                            _prev = json.loads(_line)
+                            _ids = sorted(str(e.get("anchor_id", "")) for e in _prev.get("experiences", []))
+                            if _ids:
+                                _seen.add(hashlib.sha256("|".join(_ids).encode()).hexdigest()[:16])
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+            if _fp_hash in _seen:
+                return {"requested": False, "count": len(pending), "dedup": True}
+            # 已拒绝批次不重复请求
+            if os.path.exists(_fp_denied):
+                try:
+                    for _line in open(_fp_denied, encoding="utf-8"):
+                        try:
+                            _denied = json.loads(_line)
+                            _ids = sorted(str(e.get("anchor_id", "")) for e in _denied.get("experiences", []))
+                            if _ids and hashlib.sha256("|".join(_ids).encode()).hexdigest()[:16] == _fp_hash:
+                                return {"requested": False, "count": len(pending), "dedup": "denied"}
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
             req = {
                 "request_id": uuid.uuid4().hex[:12],
                 "experiences": [{"anchor_id": p["anchor_id"],
@@ -559,10 +609,9 @@ class ExperienceLoop:
                 "status": "pending",
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
-            fp = os.path.join(out_dir, "pending_user_authorizations.jsonl")
-            with open(fp, "a", encoding="utf-8") as f:
+            with open(_fp, "a", encoding="utf-8") as f:
                 f.write(json.dumps(req, ensure_ascii=False) + "\n")
-            return {"requested": True, "count": len(pending), "file": fp,
+            return {"requested": True, "count": len(pending), "file": _fp,
                     "request_id": req["request_id"]}
         except Exception:
             return {"requested": False, "count": 0}

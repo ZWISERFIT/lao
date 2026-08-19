@@ -859,7 +859,7 @@ async def _rethink_and_revalidate(client, payload, resp, task_text, tier, agent,
                 _ev_cnt = 0
                 _kw = 0
                 if FACTS is not None:
-                    _facts = FACTS.query_facts(agent or "unknown", limit=10)
+                    _facts = FACTS.query_facts(agent or "unknown")
                     _ft = " ".join(str(f) for f in _facts)
                     _kw = sum(1 for _w in _ft.split() if _w and _w in _content)
                     _ev_cnt = min(len(_facts), 5)
@@ -1236,6 +1236,8 @@ async def chat_completions(request: Request):
 
     # v3.5.1-wiring: W4 出站验证·非流式(转发后·返回前)
     _validation = None
+    _validation_failed = False  # P0-2: 降级环境安全初始化(防 NameError)
+    _content = ""  # P0-2: 降级环境安全初始化
     if HALL_GATE is not None:
         try:
             _content = ""
@@ -1261,7 +1263,7 @@ async def chat_completions(request: Request):
             _ev_cnt = 0
             _kw_matches = 0
             if FACTS is not None:
-                _facts = FACTS.query_facts(agent or "unknown", limit=10)
+                _facts = FACTS.query_facts(agent or "unknown")
                 _facts_text = " ".join(str(f) for f in _facts)
                 if _facts_text:
                     _kw_matches = sum(1 for _w in _facts_text.split() if _w and _w in _content)

@@ -356,6 +356,7 @@ def make_decision_anchor(
     source: Optional[str] = None,
     trust_weight: float = 1.0,
     tags: Optional[List[str]] = None,
+    experience_type: str = "agent_runtime",  # P0-4: 显式经验分类(默认Agent运行经验)
 ) -> DecisionAnchor:
     """构造 DecisionAnchor（对齐 Zeus 指令结构）。"""
     return DecisionAnchor(
@@ -371,6 +372,7 @@ def make_decision_anchor(
         source=source,
         trust_weight=trust_weight,
         tags=tags or ["decision"],
+        experience_type=experience_type,
     )
 
 
@@ -382,6 +384,7 @@ def make_cognitive_anchor(
     source: Optional[str] = None,
     trust_weight: float = 1.0,
     tags: Optional[List[str]] = None,
+    experience_type: str = "agent_runtime",  # P0-4: 显式经验分类
 ) -> Anchor:
     """构造 CognitiveAnchor（认知模型·底层原则）。"""
     return Anchor(
@@ -395,6 +398,7 @@ def make_cognitive_anchor(
         source=source,
         trust_weight=trust_weight,
         tags=tags or ["cognitive"],
+        experience_type=experience_type,
     )
 
 
@@ -404,6 +408,7 @@ def make_fact_anchor(
     source: Optional[str] = None,
     trust_weight: float = 1.0,
     tags: Optional[List[str]] = None,
+    experience_type: str = "agent_runtime",  # P0-4: 显式经验分类
 ) -> Anchor:
     """构造 FactAnchor（事实·等价 MemoryAnchor, 但带 anchor_type）。"""
     return Anchor(
@@ -413,4 +418,5 @@ def make_fact_anchor(
         source=source,
         trust_weight=trust_weight,
         tags=tags or ["fact"],
+        experience_type=experience_type,
     )
