@@ -183,6 +183,92 @@ class ConfigDriftWatcher:
         })
         self._save_json(self.state_file, {"last_sig": [], "last_ts": 0.0})
 
+    # ------------------------------------------------------------------
+    # P1-2 config治理参照零信任 (2026-08-19 Shuyu审定·外部案例E·Microsoft OWASP)
+    # 今天 bind 被改 tailnet 致灾 = 越权改 config 真实案例。
+    # 监控 openclaw.json 关键字段(bind/providers/models)·越权变更告警/隔离。
+    # ------------------------------------------------------------------
+
+    OPENCLAW_CONFIG = "/home/agentuser/.openclaw/openclaw.json"
+    # 关键字段白名单(零信任: 这些字段变更必须被检测)
+    # bind 单独从 gateway.bind 提取(双失联根因④实证·不在顶层)
+    CRITICAL_FIELDS = ("providers", "models", "agents")
+
+    def detect_openclaw_critical(self) -> List[RuntimeHealthEvent]:
+        """检测 openclaw.json 关键字段漂移(bind/providers/models/agents)。
+
+        机制:
+            1. 读 openclaw.json 提取关键字段指纹(sha256[:16]·防明文泄露)
+            2. 与基线对比(基线存 state 文件·首轮自动建立)
+            3. 漂移 → config_drift 事件(status=detected·severity=warning)
+               含字段名/期望/实际指纹/who=越权变更
+            4. bind 字段变化 → 额外标记 critical(双失联根因④)
+
+        Returns:
+            List[RuntimeHealthEvent]·漂移时非空。
+
+        fail-open: 读取失败返回空(不误报)。
+        """
+        try:
+            import hashlib as _h
+            state = self._load_json(self.state_file) or {}
+            baseline = state.get("openclaw_critical", {})
+
+            with open(self.OPENCLAW_CONFIG, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+
+            # 提取关键字段指纹
+            current: Dict[str, str] = {}
+            for field in self.CRITICAL_FIELDS:
+                if field == "providers":
+                    # providers 嵌套在 models.providers
+                    val = (cfg.get("models") or {}).get("providers")
+                else:
+                    val = cfg.get(field)
+                if val is None:
+                    continue
+                current[field] = _h.sha256(
+                    json.dumps(val, sort_keys=True, ensure_ascii=False).encode("utf-8")
+                ).hexdigest()[:16]
+            # bind 在 gateway.bind(非顶层)·2026-08-19 双失联根因④实证
+            gw_bind = (cfg.get("gateway") or {}).get("bind")
+            if gw_bind is not None:
+                current["bind"] = _h.sha256(
+                    str(gw_bind).encode("utf-8")).hexdigest()[:16]
+
+            # 首轮建立基线(不告警)
+            if not baseline:
+                state["openclaw_critical"] = current
+                self._save_json(self.state_file, state)
+                return []
+
+            events = []
+            for field, fp in current.items():
+                if baseline.get(field) != fp:
+                    severity = "critical" if field == "bind" else "warning"
+                    ev = RuntimeHealthEvent(
+                        event_type="config_drift",
+                        agent_id="openclaw-config",
+                        status="detected",
+                        severity=severity,
+                        detail={
+                            "field": field,
+                            "who": "unauthorized_change",
+                            "baseline_fp": baseline.get(field),
+                            "current_fp": fp,
+                            "note": ("bind 变更=越权改config·双失联根因④"
+                                     if field == "bind" else
+                                     "关键字段变更需人工确认"),
+                        },
+                    )
+                    events.append(ev)
+            # 更新基线(检测后同步·避免重复告警同一变更)
+            state["openclaw_critical"] = current
+            self._save_json(self.state_file, state)
+            return events
+        except Exception:
+            return []
+
     # ── 检测(主入口·agent 主循环每轮调用) ─────────────────
     def check_once(self) -> List[RuntimeHealthEvent]:
         self.ensure_baseline()
