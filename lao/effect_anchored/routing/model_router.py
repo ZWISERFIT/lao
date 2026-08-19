@@ -491,6 +491,50 @@ class ModelRouter:
         self._feedback_bus = bus
         return self
 
+    # ------------------------------------------------------------------
+    # 2026-08-20 Founder 01:05 令·数据飞轮接线(任务1+2)
+    # RIS→LAO(consume_bridge) + LAO→RIS(l3_feedback_to_bridge)
+    # 纯增量·fail-open·不改变请求结构·不降命中率·不碰baseUrl
+    # ------------------------------------------------------------------
+
+    def with_experience_loop(self, loop) -> "ModelRouter":
+        """注入 ExperienceLoop(数据飞轮 LAO→RIS 反哺端)。"""
+        self._experience_loop = loop
+        return self
+
+    def _feedback_to_bridge(self) -> None:
+        """路由决策后反哺 ris-bridge.json lao_feedback 段(任务2)。
+
+        fail-open: 未注入 loop / 异常 → 静默跳过(绝不阻塞路由)。
+        原子写(tmp+replace)·由 experience_loop.l3_feedback_to_bridge 实现。
+        """
+        try:
+            loop = getattr(self, "_experience_loop", None)
+            if loop is None:
+                return
+            loop.l3_feedback_to_bridge()
+        except Exception:
+            pass  # fail-open
+
+    def _consume_ris_bridge(self) -> None:
+        """消费 ris-bridge.json → provider 黑名单 + 恢复经验灌入(任务1)。
+
+        低频调度: 每 MAX_ROUTE_BETWEEN_CONSUME 次路由执行一次(避免高频 IO)。
+        fail-open: 异常/未配置 → 静默跳过·绝不阻塞路由。
+        """
+        try:
+            self._consume_counter = getattr(self, "_consume_counter", 0) + 1
+            if self._consume_counter < self.MAX_ROUTE_BETWEEN_CONSUME:
+                return
+            self._consume_counter = 0
+            from lao.effect_anchored.ris_bridge_consumer import consume_bridge
+            consume_bridge()
+        except Exception:
+            pass  # fail-open
+
+    # 每 N 次路由消费一次 RIS 桥(低频·防 IO 拖慢路由)
+    MAX_ROUTE_BETWEEN_CONSUME = 20
+
     def with_budget_tracker(self, tracker) -> "ModelRouter":
         """注入预算追踪器(可测: 用内存/文件/Stella结算对账)。"""
         self._budget_tracker = tracker
@@ -613,6 +657,10 @@ class ModelRouter:
             raise PermissionError(f"[route] {_why}")
 
         tier = self.classifier.classify(task)
+
+        # === 2026-08-20 Founder 01:05 令·数据飞轮(任务1): 低频消费 RIS 桥
+        # (provider 黑名单 + 恢复经验灌入·每20次路由一次·fail-open) ===
+        self._consume_ris_bridge()
         # 根治 Nova 根因1: 若 task 本身是合法 tier 名(light/medium/...), 直接用·避免被 classify 误判 default=medium
         if task.strip().lower() in self.MODEL_POOL:
             tier = task.strip().lower()
@@ -625,8 +673,10 @@ class ModelRouter:
 
         pool = self.MODEL_POOL.get(tier, self.MODEL_POOL["medium"])
 
-        # === 2026-08-19 创始人令·额度感知(任务B): token-plan 配额耗尽 →
-        # 自动 failover 到可用 provider(deepseek/qwen)·且不重试不空转 ===
+        # === 2026-08-19 创始人令·额度感知(任务B) + PRD v1.1 R2.2 方案A强化:
+        # token-plan 配额耗尽 → 方案A优先: 同 provider 降级 flash 档(qwen3.6-flash)
+        # ·不换 provider·保缓存前缀(Stella护栏①·8.13教训)。同 provider 无 flash
+        # 档才方案C: 剔除换 provider(请求前决策·不中途改道)·不重试不空转 ===
         try:
             _quota_dead = []
             for _pe in pool:
@@ -634,11 +684,25 @@ class ModelRouter:
                 if _prov == "token-plan" and not self._check_provider_quota("token-plan"):
                     _quota_dead.append(_prov)
             if _quota_dead:
-                _alive = [e for e in pool if e.get("provider") not in _quota_dead]
-                if _alive:
+                _dead = set(_quota_dead)
+                # 方案A: 同 provider flash 档降级(如 qwen3.8-max→qwen3.6-flash)
+                _flash = [e for e in pool if e.get("provider") in _dead
+                          and "flash" in str(e.get("model", "")).lower()]
+                _alive = [e for e in pool if e.get("provider") not in _dead]
+                if _flash:
+                    # 审计 from = 被降级 provider 首个非 flash 档(PRD例: qwen3.8-max)
+                    _from = next(
+                        (e for e in pool if e.get("provider") in _dead
+                         and "flash" not in str(e.get("model", "")).lower()),
+                        pool[0] if pool else {})
+                    self._audit_switch(tier, _from, _flash[0], "quota_degrade_flash")
+                    pool = _flash + _alive
+                elif _alive:
+                    # 方案C: 同 provider 无 flash 档 → 剔除换 provider
                     self._audit_switch(tier, pool[0], _alive[0],
-                                       f"quota_exhausted:{','.join(_quota_dead)}")
+                                       "quota_failover_provider")
                     pool = _alive
+                # 两者皆空 → 保底原池(路由不空转)
         except Exception:
             pass  # 配额探测故障 → 不阻断(其他验证路径兜底)
 
@@ -832,6 +896,11 @@ class ModelRouter:
                     ))
             except Exception:
                 pass
+
+        # === 2026-08-20 Founder 01:05 令·数据飞轮接线(任务2):
+        # 路由决策后反哺 ris-bridge.json lao_feedback 段(RIS→LAO→RIS 闭环)
+        # fail-open: 任何异常跳过·绝不阻塞路由·不改变请求结构·不降命中率 ===
+        self._feedback_to_bridge()
         return selection
 
     def route_with_budget(
