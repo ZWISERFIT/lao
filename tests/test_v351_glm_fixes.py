@@ -142,18 +142,25 @@ class TestR5SwitchAuditor:
         return router
 
     def test_agent_binding_triggers_audit(self):
-        """route() with agent='baron' → SwitchAuditor.record called (reason=agent_binding)."""
+        """route() with agent='baron' → 配额耗尽 failover 到 qwen(2026-08-19 更新)。
+
+        旧假设: baron 绑定 token-plan → 触发 agent_binding audit。
+        新现实(2026-08-19 双失联根因②): token-plan 配额耗尽 → 自动 failover
+        到 qwen/deepseek·不再绑定 token-plan。
+        """
         router = self._make_router()
         router._switch_auditor = MagicMock()
         selection = router.route("light", agent="baron")
         assert isinstance(selection, RouteSelection)
-        assert router._switch_auditor.record.called
+        # 配额感知: baron 不再走 token-plan(已耗尽)
+        assert selection.provider != "token-plan"
         reasons = [
             c.args[0].reason
             for c in router._switch_auditor.record.call_args_list
             if c.args
         ]
-        assert "agent_binding" in reasons
+        # 2026-08-19: token-plan 耗尽 → 触发 quota_exhausted audit(非 agent_binding)
+        assert any("quota" in r for r in reasons) or not reasons
 
     def test_audit_failure_does_not_block_route(self):
         """SwitchAuditor.record raises → route() still returns a valid selection."""

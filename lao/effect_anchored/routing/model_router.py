@@ -128,6 +128,180 @@ class ModelRouter:
         except (ValueError, IndexError):
             return 999.0
 
+    # ------------------------------------------------------------------
+    # 2026-08-19 创始人令·去硬编码 + 额度感知 (任务A/B·双失联根因① ②)
+    # ------------------------------------------------------------------
+
+    CONFIG_PATH = "/home/agentuser/.openclaw/openclaw.json"
+
+    def _load_openclaw_config(self) -> dict:
+        """读取 openclaw.json 的 models.providers（动态路由数据源）。
+
+        fail-open: 读取失败返回空 dict（调用方回退硬编码池·不阻断）。
+        """
+        try:
+            import json
+            with open(self.CONFIG_PATH, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            models = cfg.get("models", {})
+            providers = models.get("providers", {})
+            # agents 模型绑定(primary/fallbacks)
+            agents = cfg.get("agents", {}).get("list", [])
+            agent_models = {}
+            for a in agents:
+                md = a.get("model", {}) or {}
+                agent_models[a.get("id", "")] = {
+                    "primary": md.get("primary", ""),
+                    "fallbacks": md.get("fallbacks", []),
+                }
+            return {"providers": providers, "agents": agent_models}
+        except Exception:
+            return {}
+
+    def _build_dynamic_pool(self) -> dict:
+        """从 openclaw.json 动态构建 MODEL_POOL（替换硬编码）。
+
+        每个 tier 用真实配置的 provider/模型构建降级链：
+            - qwen provider 模型(qwen3.7-flash/qwen-plus/qwen-max) 优先
+            - deepseek 直连(deepseek-v4-flash)
+            - token-plan(qwen3.6-flash/qwen3.7-plus/qwen3.8-max/glm-5.2)
+            - novarouteai(glm-5.2/qwen3.7-plus)
+
+        未知模型 id（config 中不存在）→ 不放入池（fail-fast: 后续路由遇
+        未知 id 直接抛错而非静默用错）。
+
+        Returns:
+            tier -> [{model, provider, credit, quality, latency, cost}]
+        """
+        try:
+            data = self._load_openclaw_config()
+            providers = data.get("providers", {})
+            if not providers:
+                return {}
+            # 收集 provider → 模型 id 集合
+            provider_models: dict = {}
+            for pid, p in providers.items():
+                ids = [m.get("id", "") for m in p.get("models", []) if m.get("id")]
+                provider_models[pid] = set(ids)
+
+            def entry(model: str, provider: str, quality: float, latency: float,
+                      cost: str, credit: bool = False) -> dict:
+                return {
+                    "model": model, "provider": provider, "credit": credit,
+                    "quality": quality, "latency": latency, "cost": cost,
+                }
+
+            # 各 tier 动态链（同一套 provider 模型·按 tier 调整质量/成本权重）
+            tiers = ("ultra_light", "light", "medium", "heavy", "reasoning",
+                     "code", "cn_explain", "cn_creative")
+            pool: dict = {}
+            for tier in tiers:
+                chain = []
+                # 1) qwen provider 优先(dashscope 直连·稳定)
+                qwen_ids = provider_models.get("qwen", set())
+                for mid in ("qwen3.7-flash", "qwen-plus", "qwen-max"):
+                    if mid in qwen_ids:
+                        chain.append(entry(mid, "qwen", 0.78 if "flash" in mid else 0.85,
+                                           0.35 if "flash" in mid else 0.5,
+                                           "$0.05/$0.10"))
+                # 2) deepseek 直连
+                if "deepseek-v4-flash" in provider_models.get("deepseek", set()):
+                    chain.append(entry("deepseek-v4-flash", "deepseek", 0.70, 0.30,
+                                       "$0.14/$0.28"))
+                # 3) token-plan(qwen3.6-flash 等)
+                tp_ids = provider_models.get("token-plan", set())
+                for mid in ("qwen3.6-flash", "qwen3.7-plus", "qwen3.8-max", "glm-5.2"):
+                    if mid in tp_ids:
+                        chain.append(entry(mid, "token-plan", 0.76, 0.55,
+                                           "$0.08/$0.20"))
+                # 4) novarouteai
+                nr_ids = provider_models.get("novarouteai", set())
+                for mid in ("glm-5.2", "qwen3.7-plus", "qwen3.6-flash"):
+                    if mid in nr_ids:
+                        chain.append(entry(mid, "novarouteai", 0.75, 0.50,
+                                           "$0.10/$0.25"))
+                if chain:
+                    pool[tier] = chain
+            return pool
+        except Exception:
+            return {}
+
+    def _check_provider_quota(self, provider: str) -> bool:
+        """检查 provider 配额是否耗尽（额度感知·任务B）。
+
+        配额机制仅适用于 token-plan（周配额制·今天 429 实证）。
+        qwen/deepseek 为直连非配额制 → 默认可用（True）。
+
+        三重信号（任一命中即视为耗尽/不可用）:
+            1. 外部配额信号文件 data/provider-quota.json 标记 exhausted
+               (运维/创始人可手动标记·无需改代码)
+            2. 环境变量 PROVIDER_QUOTA_<PROVIDER>=exhausted
+            3. 带认证的 token-plan /models 探测返回 429（配额耗尽专用码）
+
+        401(认证问题)/403/网络错误 → 视为可用（不能误杀——401≠配额耗尽）。
+
+        Returns:
+            True = 可用 · False = 耗尽/不可用（调用方应 failover）。
+        """
+        if provider != "token-plan":
+            return True  # 直连 provider 非配额制·默认可用
+        try:
+            import time
+            now = time.time()
+            cached = self._quota_cache.get(provider)
+            if cached and now - cached[1] < self._quota_cache_ttl:
+                return cached[0]
+
+            # 信号1: 外部配额状态文件
+            quota_file = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "data", "provider-quota.json")
+            if os.path.exists(quota_file):
+                import json as _json
+                with open(quota_file, "r", encoding="utf-8") as f:
+                    qd = _json.load(f)
+                if qd.get(provider) == "exhausted":
+                    self._quota_cache[provider] = (False, now)
+                    return False
+
+            # 信号2: 环境变量
+            env_key = f"PROVIDER_QUOTA_{provider.upper().replace('-', '_')}"
+            if os.environ.get(env_key, "").lower() == "exhausted":
+                self._quota_cache[provider] = (False, now)
+                return False
+
+            # 信号3: 带认证探测(429 = 配额耗尽)
+            ok = self._verify_model_exists(provider, "__quota_probe__")
+            self._quota_cache[provider] = (ok, now)
+            return ok
+        except Exception:
+            return True  # 探测异常 → 默认可用(不误杀)
+
+    def _fail_fast_unknown_model(self, model: str, provider: str) -> None:
+        """未知模型 id fail-fast（任务A·绝不静默用错配置）。
+
+        当路由结果指向的 model 不在任何 provider 配置中 → 抛 ValueError
+        并附带告警说明（而非悄悄降级/用错）。
+        """
+        try:
+            data = self._load_openclaw_config()
+            providers = data.get("providers", {})
+            known = set()
+            for p in providers.values():
+                for m in p.get("models", []):
+                    if m.get("id"):
+                        known.add(m["id"])
+            if model and model not in known:
+                raise ValueError(
+                    f"[ModelRouter:FAIL-FAST] 未知模型 id '{model}' (provider={provider}) "
+                    f"不在 openclaw.json models.providers 配置中。请检查配置——"
+                    f"绝不静默用错模型。已知模型: {sorted(known)[:20]}"
+                )
+        except ValueError:
+            raise
+        except Exception:
+            pass  # 配置读取失败 → 不阻断(其他验证路径兜底)
+
     # R3: 跨provider模型存在性验证 — 5分钟TTL缓存(避免每次路由打网络请求)
     _MODEL_CACHE_TTL: float = 300.0  # 5分钟
 
@@ -273,6 +447,15 @@ class ModelRouter:
         self._consent = consent
         self._consent_owner = consent_owner
         self.MODEL_POOL = model_pool if model_pool is not None else self.__class__.MODEL_POOL
+        # 2026-08-19 创始人令·去硬编码: 动态读取 openclaw.json 覆盖硬编码池
+        try:
+            self._config_pool = self._build_dynamic_pool()
+            if self._config_pool:
+                self.MODEL_POOL = self._config_pool
+        except Exception:
+            self._config_pool = {}  # 读取失败 → 用硬编码池(不阻断)
+        self._quota_cache: dict = {}          # provider -> (available, timestamp)
+        self._quota_cache_ttl: float = 60.0   # 配额探测缓存 60s
         # 成本红线(T1): 预算追踪器(可选注入, 便于测试)
         self._budget_tracker = None
         self._daily_budget = DEFAULT_DAILY_BUDGET
@@ -441,6 +624,44 @@ class ModelRouter:
             tier = "code"
 
         pool = self.MODEL_POOL.get(tier, self.MODEL_POOL["medium"])
+
+        # === 2026-08-19 创始人令·额度感知(任务B): token-plan 配额耗尽 →
+        # 自动 failover 到可用 provider(deepseek/qwen)·且不重试不空转 ===
+        try:
+            _quota_dead = []
+            for _pe in pool:
+                _prov = _pe.get("provider", "")
+                if _prov == "token-plan" and not self._check_provider_quota("token-plan"):
+                    _quota_dead.append(_prov)
+            if _quota_dead:
+                _alive = [e for e in pool if e.get("provider") not in _quota_dead]
+                if _alive:
+                    self._audit_switch(tier, pool[0], _alive[0],
+                                       f"quota_exhausted:{','.join(_quota_dead)}")
+                    pool = _alive
+        except Exception:
+            pass  # 配额探测故障 → 不阻断(其他验证路径兜底)
+
+        # === 2026-08-19 创始人令·fail-fast(任务A): 池内未知模型 id 直接抛错 ===
+        try:
+            _known_ids = set()
+            _data = self._load_openclaw_config()
+            for _p in _data.get("providers", {}).values():
+                for _m in _p.get("models", []):
+                    if _m.get("id"):
+                        _known_ids.add(_m["id"])
+            if _known_ids:
+                for _pe in pool:
+                    if _pe.get("model") not in _known_ids:
+                        raise ValueError(
+                            f"[ModelRouter:FAIL-FAST] 模型 '{_pe.get('model')}' 不在 "
+                            f"openclaw.json providers 配置中(provider={_pe.get('provider')})。"
+                            f"拒绝路由——绝不静默用错配置。"
+                        )
+        except ValueError:
+            raise
+        except Exception:
+            pass
 
         # === L2/L3→L1 反哺(2026-08-16 三层Loop): 经验约束先于选品过滤 ===
         # provider_avoid/model_avoid 摘除问题组合(错误复利/冲突修正产物);

@@ -364,11 +364,79 @@ class RecoveryExecutor:
         return {"recovered": result.recovered, "verified": result.verified,
                 "attempts": result.attempts, "recorded": result.recorded}
 
+    # ------------------------------------------------------------------
+    # 2026-08-19 创始人令·C4: 补 recover_gateway + detect_bind
+    # (双失联教训: 检测到 gateway_down 1258 次但从无恢复动作·
+    #  config_drift 只检测 secrets 没检测 bind 配置)
+    # ------------------------------------------------------------------
+
+    def recover_gateway(self) -> Dict:
+        """OpenClaw Gateway 自动恢复(检测→重启→验证→记录)。
+
+        C4 补完(2026-08-19 创始人令·三保险):
+            旧 HealthMonitor.check_gateway 只检测(emit gateway_down)·
+            从不执行恢复——1258 次检测无一次 action。本方法补完整闭环:
+                detect   → _find_pid("gateway --port 18789") 为 None
+                recover  → systemctl --user restart openclaw-gateway
+                verify   → 进程重新出现(pid 存活)
+                record   → RecoveryEngine.run + 事件落盘
+        """
+        def detect() -> bool:
+            return _find_pid("gateway --port 18789") is None
+
+        def recover() -> bool:
+            try:
+                subprocess.run(["systemctl", "--user", "restart", "openclaw-gateway.service"],
+                               timeout=20, capture_output=True)
+                return True
+            except Exception:
+                return False
+
+        def verify() -> bool:
+            return _find_pid("gateway --port 18789") is not None
+
+        result = self.engine.run(
+            "gateway_down", "gateway",
+            detect_fn=detect, classify_fn=lambda: "gateway_down",
+            action=RecoveryAction(name="restart_openclaw_gateway",
+                                  recover_fn=recover, verify_fn=verify,
+                                  max_attempts=3),
+        )
+        self._emit_result(result, severity="critical", verify_method="pid-alive")
+        self._distill(result, "restart_openclaw_gateway")
+        return {"recovered": result.recovered, "verified": result.verified,
+                "attempts": result.attempts, "recorded": result.recorded}
+
+    def detect_bind(self, expected_bind: str = "auto") -> Dict:
+        """检测 Gateway bind 配置漂移(双失联根因④: bind 被改 tailnet)。
+
+        读取 openclaw.json 的 gateway.bind 字段·与期望值比对:
+            - 一致 → {"drift": False, "bind": ...}
+            - 漂移 → {"drift": True, "expected": ..., "actual": ...}
+
+        期望值默认 "auto"(正常状态)·异常历史: tailnet(双失联期)。
+        供主循环周期调用·漂移时 emit config_drift 事件。
+        """
+        try:
+            import json as _json
+            with open("/home/agentuser/.openclaw/openclaw.json", "r", encoding="utf-8") as f:
+                cfg = _json.load(f)
+            actual = str(cfg.get("gateway", {}).get("bind", "") or "")
+            if actual == expected_bind:
+                return {"drift": False, "bind": actual}
+            # 漂移 → 事件
+            _emit(RuntimeHealthEvent(
+                event_type="config_drift", agent_id="gateway-bind",
+                status="detected", severity="warning",
+                detail={"field": "gateway.bind", "expected": expected_bind, "actual": actual}))
+            return {"drift": True, "expected": expected_bind, "actual": actual}
+        except Exception:
+            return {"drift": False, "bind": "unknown"}  # 读取失败不误报
+
     def recover_cpu(self, current_cpu: float,
                     settle_s: Optional[float] = None,
                     sample_interval: Optional[float] = None) -> Dict:
         """CPU 持续 > 90% → 自动恢复闭环(P0-2 + B1 修复)。
-
         五步闭环: Detect(持续 N 帧) → Classify(cpu_sustained) →
                   Recover(识别 top 进程·降级非关键 mcp) → Verify(独立瞬时重采样) → Record。
 
@@ -730,7 +798,15 @@ def run_once(verbose: bool = True) -> Dict:
             _session_bloat_alert(remaining)
 
     # openclaw 连接检查
-    connector.check_gateway()
+    gw_ev = connector.check_gateway()
+    if gw_ev.event_type == "gateway_down":
+        # 2026-08-19 C4: 检测到 gateway_down → 执行恢复(不再只检测不动作)
+        r = executor.recover_gateway()
+        summary["recoveries"].append({"action": "gateway_recovery", **r})
+    # 2026-08-19 C4: bind 配置漂移检测(双失联根因④)
+    bind_drift = executor.detect_bind()
+    if bind_drift.get("drift"):
+        summary["bind_drift"] = bind_drift
     connector.check_webui()
 
     # B2: LAO→RIS 反向桥消费(错误率退化 → 事件 → 隔离)

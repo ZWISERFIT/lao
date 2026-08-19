@@ -12,8 +12,9 @@ def test_routing():
     # 2026-08-16 禁v4-pro(commit bbe9bde)后: 重任务→qwen/token-plan系, 断言不再含pro
     assert route.model != "deepseek-v4-pro"
     route2 = router.route("日报数据汇总")
-    # 2026-08-16 统一模型名: deepseek-flash→deepseek-v4-flash
-    assert route2.model in ("deepseek-v4-flash", "qwen-plus", "qwen-flash")
+    # 2026-08-19 去硬编码(创始人令): 动态池 qwen 直连优先·不再固定 deepseek-v4-flash
+    assert route2.model in ("qwen3.7-flash", "qwen-plus", "qwen-max",
+                            "deepseek-v4-flash", "qwen3.6-flash")
     # v2.0: ultra_light任务优先Qoder CN credit消费(qwen-flash)
     print("  ✅ test_routing PASSED")
 
