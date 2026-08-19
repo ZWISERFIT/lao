@@ -117,6 +117,43 @@ class TestIdempotent(unittest.TestCase):
         self.assertEqual(r2.anchors_added, 0,
                          f"第二次应 0 新增: {r2.anchors_added}")
 
+    def test_high_volume_idempotent(self):
+        """P0-0: 大目录多次萃取幂等(防容量淘汰导致虚增)"""
+        tmp = tempfile.mkdtemp()
+        root = os.path.join(tmp, "runtime")
+        os.makedirs(root)
+        # 造 >500 个锚点(超 CognitiveAnchorStore 默认 500·验证 max_anchors 修复)
+        for i in range(30):
+            with open(os.path.join(root, f"doc{i}.md"), "w", encoding="utf-8") as f:
+                f.write(f"# 文档{i}\n\n必须遵守规则{i}。\n")
+        ex = RuntimeExtractor()
+        r1 = ex.extract(root)
+        r2 = ex.extract(root)
+        r3 = ex.extract(root)
+        self.assertGreaterEqual(r1.anchors_added, 30,
+                                f"首次应萃取全部: {r1.anchors_added}")
+        self.assertEqual(r2.anchors_added, 0, f"第二次应 0: {r2.anchors_added}")
+        self.assertEqual(r3.anchors_added, 0, f"第三次应 0: {r3.anchors_added}")
+
+
+class TestRecallParamExposed(unittest.TestCase):
+    """P0-0: extract 签名暴露 recall_level"""
+
+    def test_recall_level_in_signature(self):
+        import inspect
+        sig = inspect.signature(RuntimeExtractor.extract)
+        self.assertIn("recall_level", sig.parameters,
+                      "extract 应暴露 recall_level 参数(P0-0)")
+
+    def test_recall_override_works(self):
+        tmp = tempfile.mkdtemp()
+        root = _make_runtime_dir(tmp)
+        ex = RuntimeExtractor()
+        r_hi = ex.extract(root, recall_level="high_recall")
+        r_pre = RuntimeExtractor().extract(root, recall_level="high_precision")
+        self.assertGreaterEqual(r_hi.anchors_added, r_pre.anchors_added,
+                                "high_recall 应 >= high_precision")
+
 
 class TestOversizeSkipped(unittest.TestCase):
     """T6: 超限文件跳过"""

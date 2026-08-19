@@ -93,7 +93,8 @@ class RuntimeExtractor:
     RECALL_LEVELS = ("high_precision", "balanced", "high_recall")
 
     def __init__(self, store: Optional[CognitiveAnchorStore] = None,
-                 recall_level: str = "balanced"):
+                 recall_level: str = "balanced",
+                 max_anchors: int = 10000):
         """初始化萃取器。
 
         Args:
@@ -101,20 +102,34 @@ class RuntimeExtractor:
             recall_level: "high_precision"(宁缺毋滥·仅标题+决策语句) |
                           "balanced"(关键段落取 1/2) | "high_recall"(全部段落)。
                           非法值按 "balanced" 处理。
+            max_anchors: 内部 store 容量上限。默认 10000(Runtime 萃取可达数千锚点·
+                          远超 CognitiveAnchorStore 默认 500·P0-0 修复: 防容量淘汰
+                          导致幂等失效)。外部传入 store 时忽略。
         """
-        self.store = store if store is not None else CognitiveAnchorStore()
+        self.store = store if store is not None else CognitiveAnchorStore(
+            max_anchors=max_anchors)
         self.recall_level = (recall_level
                              if recall_level in self.RECALL_LEVELS else "balanced")
 
     # -- 主流程 -----------------------------------------------------------
 
-    def extract(self, runtime_root: str) -> ExtractionResult:
+    def extract(self, runtime_root: str,
+                recall_level: Optional[str] = None) -> ExtractionResult:
         """扫描 runtime_root → 萃取锚点 → 存入 store。返回摘要。
+
+        Args:
+            runtime_root: 要扫描的 Runtime 目录。
+            recall_level: 本次调用的召回级别覆盖(不传则用构造时值)。
 
         fail-open：任何异常返回空 ExtractionResult 不抛。
         """
         start = time.time()
         try:
+            if recall_level is not None:
+                if recall_level in self.RECALL_LEVELS:
+                    self.recall_level = recall_level
+                else:
+                    self.recall_level = "balanced"
             return self._extract_impl(runtime_root, start)
         except Exception as exc:  # fail-open
             return ExtractionResult(
@@ -155,10 +170,19 @@ class RuntimeExtractor:
                     if self.store.get(anchor.anchor_id) is not None:
                         result.anchors_skipped += 1
                     else:
+                        _before = len(self.store._anchors) if hasattr(self.store, "_anchors") else None
                         self.store.put(anchor)
-                        result.anchors_added += 1
-                        result.total_chars_extracted += len(content)
-                        result.estimated_tokens += self.estimate_tokens(content)
+                        if _before is not None:
+                            _after = len(self.store._anchors)
+                            if _after > _before:
+                                result.anchors_added += 1
+                                result.total_chars_extracted += len(content)
+                                result.estimated_tokens += self.estimate_tokens(content)
+                            else:
+                                # 容量淘汰导致未新增(或覆盖)·不算 added·但也不重复萃
+                                result.anchors_skipped += 1
+                        else:
+                            result.anchors_added += 1
                 except Exception as exc:
                     result.errors.append(f"{path}: {exc}")
                     continue
@@ -389,14 +413,16 @@ class RuntimeExtractor:
 
 
 def extract_runtime(runtime_root: str, store_path: Optional[str] = None,
-                    recall_level: str = "balanced") -> ExtractionResult:
+                    recall_level: str = "balanced",
+                    max_anchors: int = 10000) -> ExtractionResult:
     """便捷入口：创建 store(可落盘)→ RuntimeExtractor.extract → 返回结果。
 
     供 lao/init.py 或 CLI 调用。fail-open：任何异常返回空 ExtractionResult 不抛。
     """
     try:
-        store = CognitiveAnchorStore(store_path=store_path) if store_path \
-            else CognitiveAnchorStore()
+        store = CognitiveAnchorStore(store_path=store_path,
+                                     max_anchors=max_anchors) if store_path \
+            else CognitiveAnchorStore(max_anchors=max_anchors)
         return RuntimeExtractor(store=store, recall_level=recall_level).extract(runtime_root)
     except Exception as exc:
         return ExtractionResult(errors=[f"extract_runtime failed: {exc}"])
