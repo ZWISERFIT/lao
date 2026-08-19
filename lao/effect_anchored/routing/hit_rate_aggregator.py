@@ -88,6 +88,7 @@ def main():
     out_json = os.path.join(OUT_DIR, "hit-rate-by-agent-task-hour.json")
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump({"generated_at": datetime.now().isoformat(),
+                   "WARNING_FROZEN_20260817": "命中率已冻结对外发布·router局部视图(覆盖~22%流量)≠全局命中率·全局以官方DeepSeek CSV为唯一ground truth·见hit-rate-divergence-rootcause-20260817.md",
                    "total_events": len(events), "rows": rows},
                   f, ensure_ascii=False, indent=1)
     print(f"✅ 聚合完成: {len(events)} 事件 → {len(rows)} 行 (agent×task×hour)")

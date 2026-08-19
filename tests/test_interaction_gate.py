@@ -3,27 +3,27 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def test_high_confidence_auto():
-    from effect_anchored.interaction.interaction_gate import InteractionGate
+    from lao.effect_anchored.interaction.interaction_gate import InteractionGate
     gate = InteractionGate(mode="sdk")
     result = gate.check(type("Event",(),{"confidence":0.98,"reason":"测试"})(), confidence=0.98)
     assert result.needs_user == False
     assert result.auto_action == "blocked"
 
 def test_low_confidence_push():
-    from effect_anchored.interaction.interaction_gate import InteractionGate
+    from lao.effect_anchored.interaction.interaction_gate import InteractionGate
     gate = InteractionGate(mode="sdk")
     result = gate.check(type("Event",(),{"confidence":0.6,"reason":"测试"})(), confidence=0.6)
     assert result.needs_user == True
 
 def test_confirm():
-    from effect_anchored.interaction.interaction_gate import InteractionGate
+    from lao.effect_anchored.interaction.interaction_gate import InteractionGate
     gate = InteractionGate(mode="sdk")
     result = gate.confirm("test-1", "confirm_block")
     assert result.permanent == True
     assert result.anchor_created == True
 
 def test_ui_backends():
-    from effect_anchored.interaction.ui_backends import CLIBackend, SDKBackend, APIBackend
+    from lao.effect_anchored.interaction.ui_backends import CLIBackend, SDKBackend, APIBackend
     cli = CLIBackend()
     assert cli is not None
     sdk = SDKBackend()

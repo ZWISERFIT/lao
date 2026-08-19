@@ -53,6 +53,55 @@ class ExperienceContract:
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     # anchor_type 兼容(对齐 ERGE 三元组映射): fact/decision/cognitive
     anchor_type: str = "fact"
+    # ── v3.5 L3 确权流程(飞轮引擎: 授权→DID 签名→上链交易) ──────────────
+    authorization_status: str = "PENDING"   # PENDING / AUTHORIZED / REVOKED
+    did_signature: Optional[str] = None     # DID 签名(所有方对经验哈希的签名)
+    transaction_ready: bool = False         # 是否准备好上链交易
+    royalty_config: Dict[str, Any] = field(default_factory=dict)  # 版税配置
+
+    # ── v3.5 确权流程方法 ────────────────────────────────────────────────
+
+    def authorize(self, did_signature: str) -> "ExperienceContract":
+        """确权：登记 DID 签名并置为已授权(交易就绪)。
+
+        Args:
+            did_signature: 所有方 DID 对经验内容哈希的签名字符串(非空)。
+        """
+        if not did_signature or not str(did_signature).strip():
+            raise ValueError("DID 签名不能为空")
+        self.did_signature = str(did_signature).strip()
+        self.authorization_status = "AUTHORIZED"
+        self.transaction_ready = True
+        return self
+
+    def revoke(self) -> "ExperienceContract":
+        """撤销授权：不可再上链交易(签名保留作审计痕迹)。"""
+        self.authorization_status = "REVOKED"
+        self.transaction_ready = False
+        return self
+
+    @property
+    def is_transaction_ready(self) -> bool:
+        """确权完备性：已授权 + 有 DID 签名 + 交易标记。"""
+        return (
+            self.authorization_status == "AUTHORIZED"
+            and bool(self.did_signature)
+            and self.transaction_ready
+        )
+
+    def content_hash(self) -> str:
+        """经验内容哈希(DID 签名的签名对象)。"""
+        payload = {
+            "owner": self.owner,
+            "domain": self.domain,
+            "confidence": self.confidence,
+            "anchor_type": self.anchor_type,
+            "allowed_agents": self.allowed_agents,
+            "forbidden_domains": self.forbidden_domains,
+        }
+        return hashlib.sha256(
+            _json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
+        ).hexdigest()
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -90,6 +139,17 @@ class ExperienceContract:
             issues.append("confidence 必须在 0-1")
         if not self.can_share(self.owner):
             issues.append("owner 必须能访问自身经验")
+        # v3.5 确权流程校验
+        if self.authorization_status not in ("PENDING", "AUTHORIZED", "REVOKED"):
+            issues.append("authorization_status 必须为 PENDING/AUTHORIZED/REVOKED")
+        if self.authorization_status == "AUTHORIZED" and not self.did_signature:
+            issues.append("AUTHORIZED 状态必须携带 did_signature")
+        if self.transaction_ready and not self.is_transaction_ready:
+            issues.append("transaction_ready 需要 AUTHORIZED 状态 + did_signature")
+        shares = [float(v) for v in self.royalty_config.values()
+                  if isinstance(v, (int, float)) and not isinstance(v, bool)]
+        if shares and sum(shares) > 1.0 + 1e-9:
+            issues.append("royalty_config 分成比例之和不能超过 1.0")
         return issues
 
 

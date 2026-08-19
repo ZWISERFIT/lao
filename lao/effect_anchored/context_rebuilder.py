@@ -40,6 +40,10 @@ class Event:
     anchor_keys: List[str] = field(default_factory=list)
     files_touched: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # v3.5 L2 翻译官·确定性标记(DeterministicTranslator 产物回填)
+    deterministic: bool = False            # 是否是确定性回答
+    fact_basis: List[str] = field(default_factory=list)   # 事实依据引用(fact_id/content)
+    confidence_boost: float = 0.0          # 确定性提升幅度(事实佐证贡献)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -55,6 +59,9 @@ class Event:
             "anchor_keys": self.anchor_keys,
             "files_touched": self.files_touched,
             "metadata": self.metadata,
+            "deterministic": self.deterministic,
+            "fact_basis": self.fact_basis,
+            "confidence_boost": self.confidence_boost,
         }
 
 

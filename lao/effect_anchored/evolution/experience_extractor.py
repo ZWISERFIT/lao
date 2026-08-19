@@ -92,11 +92,18 @@ class ExperienceExtractor:
 
     DEFAULT_REGISTRY_PATH: str = ""
 
-    def __init__(self, registry_path: Optional[str] = None) -> None:
+    def __init__(self, registry_path: Optional[str] = None,
+                 momo_sink: Optional[Any] = None,
+                 ethan_sink: Optional[Any] = None) -> None:
         """
         Args:
             registry_path: 模式注册表 JSON 文件路径。
                            默认：同目录下的 .pattern_registry.json
+            momo_sink: v3.5 L3 — Momo 反馈通道接收器 callable(dict)。
+                       AGENT_RUNTIME 类经验写入该通道(同步给 Momo 优化产品)。
+            ethan_sink: v3.5 L3 — Ethan 确权管道接收器 callable(dict)。
+                        USER_PERSONAL / HUMAN_AGENT_COLLAB 类经验写入该管道
+                        (经授权确权后上平台交易)。
         """
         if registry_path is None:
             if self.DEFAULT_REGISTRY_PATH:
@@ -107,6 +114,63 @@ class ExperienceExtractor:
                 )
         self.registry_path = Path(registry_path)
         self._registry: dict[str, Any] = self._load_registry()
+        # v3.5 L3: 三类经验自动分流(分类器 + 通道接收器 + 分流日志)
+        self._classifier = None  # 懒加载, 避免模块级循环导入
+        self._momo_sink = momo_sink
+        self._ethan_sink = ethan_sink
+        self.pipeline_routes: list[dict[str, Any]] = []
+        self.last_route: Optional[dict[str, Any]] = None
+
+    def with_pipelines(self, momo_sink: Optional[Any] = None,
+                       ethan_sink: Optional[Any] = None) -> "ExperienceExtractor":
+        """注入/替换 L3 分流通道接收器(链式·可测)。"""
+        if momo_sink is not None:
+            self._momo_sink = momo_sink
+        if ethan_sink is not None:
+            self._ethan_sink = ethan_sink
+        return self
+
+    def _get_classifier(self):
+        if self._classifier is None:
+            from lao.effect_anchored.evolution.experience_classifier import (
+                ExperienceClassifier,
+            )
+            self._classifier = ExperienceClassifier()
+        return self._classifier
+
+    def _route_experience(self, raw_input: dict[str, Any],
+                          pattern: ErrorPattern) -> dict[str, Any]:
+        """v3.5 L3: 对萃取产物做三类经验自动分流。
+
+        - AGENT_RUNTIME      → 写入 Momo 反馈通道(优化产品)
+        - USER_PERSONAL      → 写入 Ethan 确权管道(授权确权后交易)
+        - HUMAN_AGENT_COLLAB → 写入 Ethan 确权管道(授权确权后交易)
+
+        通道接收器未注入时仅记录分流日志(不阻塞萃取主流程)。
+        """
+        from lao.effect_anchored.evolution.experience_classifier import (
+            CHANNEL_ETHAN_RIGHTS,
+            CHANNEL_MOMO_FEEDBACK,
+        )
+        experience = dict(raw_input)
+        experience.setdefault("source_agent", pattern.source_agent)
+        experience["pattern_id"] = pattern.pattern_id
+        experience["pattern_fingerprint"] = pattern.pattern_fingerprint
+        experience["category_hint"] = pattern.category
+
+        result = self._get_classifier().classify_and_route(experience)
+        record = result.to_dict()
+        try:
+            if result.channel == CHANNEL_MOMO_FEEDBACK and callable(self._momo_sink):
+                self._momo_sink(record)
+            elif result.channel == CHANNEL_ETHAN_RIGHTS and callable(self._ethan_sink):
+                self._ethan_sink(record)
+        except Exception as e:  # 通道故障不阻塞萃取主流程
+            logger.warning("经验分流通道写入失败(%s): %s", result.channel, e)
+            record["sink_error"] = str(e)
+        self.pipeline_routes.append(record)
+        self.last_route = record
+        return record
 
     # ── Registry Management ──────────────────────────────────────────────
 
@@ -308,6 +372,9 @@ class ExperienceExtractor:
         if need_perm:
             self._register_pattern(pattern)
             self._save_registry()
+
+        # 步骤 7: v3.5 L3 三类经验自动分流(AGENT_RUNTIME→Momo / 其余→Ethan)
+        self._route_experience(raw_input, pattern)
 
         return pattern
 

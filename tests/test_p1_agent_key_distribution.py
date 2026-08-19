@@ -2,12 +2,15 @@
 
 智囊团决议 P1: per-Agent 独立 key·DeepSeek 后台见各 Agent 独立用量。
 """
-import sys, os, importlib
+import sys, os, importlib, pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "lao", "effect_anchored", "routing"))
 
 from lao.effect_anchored.routing import lao_router_server as m
+
+# 检查 Agent Key 是否已配置（需要 secrets.env 或环境变量中有 OC_DEEPSEEK_*_API_KEY）
+_KEYS_CONFIGURED = all(m.AGENT_KEYS.values())
 
 
 def test_extract_agent_from_model_hint():
@@ -34,6 +37,7 @@ def test_extract_agent_from_header():
     assert m._extract_agent("", {}) == ""
 
 
+@pytest.mark.skipif(not _KEYS_CONFIGURED, reason="Agent keys not configured (need OC_DEEPSEEK_*_API_KEY in secrets.env)")
 def test_nine_agent_keys_available():
     """9 Agent 独立 key 全部就绪(secrets.env)。"""
     keys = m.AGENT_KEYS
@@ -47,6 +51,7 @@ def test_unknown_agent_falls_back():
     assert m._extract_agent("deepseek-unknown/model", {}) == ""
 
 
+@pytest.mark.skipif(not _KEYS_CONFIGURED, reason="Agent keys not configured (need OC_DEEPSEEK_*_API_KEY in secrets.env)")
 def test_distinct_keys():
     """各 Agent key 各不相同(独立·非共用)。"""
     vals = list(m.AGENT_KEYS.values())
