@@ -70,3 +70,23 @@ tests/real_world_acceptance.py
 tests/test_incident_regression.py
 # orphan module, no reference from any published code
 lao/effect_anchored/routing/per_agent_token_ledger.py
+
+# ---- RIS is a separate product, released separately (founder ruling 28/29, 2026-08-25) ----
+/ris/
+tests/test_p01_diagnose_before_recover.py
+tests/test_p11_cost_guard.py
+tests/test_p12_config_zero_trust.py
+tests/test_ris_experience_extractor.py
+tests/test_ris_p02_p03.py
+tests/test_ris_p0_fixes_20260816.py
+tests/test_ris_provider_monitor.py
+tests/test_ris_recovery_engine.py
+tests/test_ris_runtime_health.py
+tests/test_ris_state_registry.py
+
+# ---- internal audit / delivery reports: internal roles and process, not the recipe ----
+/QODER_AUDIT_REPORT.md
+/TRISTAN_AUDIT_REPORT.md
+docs/LAO-v3.4-Compatibility-Repair-Report-20260813.md
+docs/LAO-v3.4-Production-Routing-Stabilization-Report-20260813.md
+docs/LAO-v3.4-Provider-Reliability-Hardening-Report-20260813.md

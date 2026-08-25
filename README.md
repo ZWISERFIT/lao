@@ -132,29 +132,31 @@ ZWISERFIT 9-Agent Collective 全栈跑在自己的 LAO 上——每个 Agent 的
 
 ## 发布范围说明（v3.6.0-r3）
 
-本仓库开源的是**配方**：LAO 的路由、认知锚点、经验闭环，以及 RIS 健康门的实现代码与回归测试。
+本仓库开源的是**配方**：LAO 的路由、认知锚点、经验闭环，以及它们的回归测试。**LAO 独立可运行，不依赖任何其他 ZWISERFIT 组件。**
 
-以下内容**不在本次开源范围内**，属运营侧部署，已列入路线图：
+以下内容**不在本次开源范围内**：
 
+- **RIS（Agent Runtime Reliability Layer）**：运行时可靠性层，是**独立产品**，将另行发布，不含在本仓库内。LAO 与 RIS 之间通过一个只读的共享 JSON 文件契约通信（`RIS_BRIDGE_FILE`，默认 `~/shared/state/ris-bridge.json`）；该文件不存在时 LAO 全功能正常运行，仅不获得来自 RIS 的 provider 健康信号。本仓库保留的是 LAO 一侧的消费者实现（`ris_bridge_consumer.py`、`ris_health_gate.py`）与其回归测试，不含 RIS 本身。
 - **排序权重数值**（`lao/effect_anchored/weights.json`）：加载接口与应用方式开源，权重数值不入库。文件缺失时回退为均权，功能可用但不含我们的认知偏置。
 - **监控与门禁**：成本漂移告警、数据新鲜度告警、软启动门禁、单实例托管（systemd）、部署后版本校验、账单对账，均为运营侧脚本，开源版暂不包含。
 - **内部运行数据**：事故记录、经验库、运行态快照、密钥与环境变量。
 
-也就是说：开源版**包含产品代码内的保险丝**（重试上限与任务级 token 熔断、4xx 真实状态码透传、配对感知的上下文剪枝、provider 隔离冷却与数据时效过滤），但**不包含运营侧的监控与门禁**。自建部署请自备监控。
+也就是说：开源版**包含产品代码内的保险丝**——重试上限与任务级 token 熔断、4xx 真实状态码透传、配对感知的上下文剪枝，以及 LAO 侧的桥数据陈旧保护（`RIS_BRIDGE_STALE_S`，默认 180 秒，桥文件超时即视为无信号并放行，fail-open）。**provider 隔离冷却（600 秒）与 provider 级数据时效过滤（900 秒）实现在 RIS 内，不随本仓库发布**；自建部署若需要这两层，需自备 provider 健康监控，或等 RIS 发布。运营侧的监控与门禁同样不包含，请自备监控。
 
 本次为**带保险丝的发布**，不声称零缺陷。
 
 ### Scope of this release (English)
 
-This repository open-sources the *recipe*: LAO routing, cognitive anchoring, the experience loop, and the RIS health gate, with their regression tests.
+This repository open-sources the *recipe*: LAO routing, cognitive anchoring, the experience loop, and their regression tests. **LAO runs standalone and does not depend on any other ZWISERFIT component.**
 
-Not included in this release (operations-side, on the roadmap):
+Not included in this release:
 
+- **RIS (Agent Runtime Reliability Layer)** — a **separate product**, shipped separately, not contained here. LAO talks to RIS only through a read-only shared JSON file contract (`RIS_BRIDGE_FILE`, default `~/shared/state/ris-bridge.json`). When that file is absent, LAO runs at full function and simply receives no provider-health signal from RIS. What this repo keeps is the LAO-side consumer (`ris_bridge_consumer.py`, `ris_health_gate.py`) and its regression tests — not RIS itself.
 - **Ranking weight values** (`lao/effect_anchored/weights.json`) — the loading interface is open, the values are not committed. When the file is absent, the engine falls back to uniform weights: usable, but without our tuning.
 - **Monitoring and gating** — cost-drift alerts, data-freshness alerts, soft-start gating, single-instance supervision (systemd), post-deploy version verification, and billing reconciliation are ops-side scripts and are not shipped here.
 - **Internal runtime data** — incident records, experience stores, runtime snapshots, secrets and environment files.
 
-In short: the fuses that live in the product code are included (retry ceiling and per-task token cutoff, real 4xx status pass-through, pair-aware context pruning, provider isolation cooldown and staleness filtering). The ops-side monitoring and gating are not. Bring your own monitoring.
+In short: the fuses that live in the product code are included — retry ceiling and per-task token cutoff, real 4xx status pass-through, pair-aware context pruning, and LAO-side bridge staleness protection (`RIS_BRIDGE_STALE_S`, default 180s, fail-open). **Provider isolation cooldown (600s) and provider-level staleness filtering (900s) are implemented inside RIS and do not ship with this repository**; if you need those two layers in a self-hosted deployment, bring your own provider health monitoring or wait for the RIS release. Ops-side monitoring and gating are likewise not included — bring your own monitoring.
 
 This is a **release with fuses**, not a claim of zero defects.
 
