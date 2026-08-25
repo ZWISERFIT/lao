@@ -204,8 +204,13 @@ class ModelRouter:
                         chain.append(entry(mid, "qwen", 0.78 if "flash" in mid else 0.85,
                                            0.35 if "flash" in mid else 0.5,
                                            "$0.05/$0.10"))
-                # 2) deepseek 直连
-                if "deepseek-v4-flash" in provider_models.get("deepseek", set()):
+                # 2) deepseek 直连 (C21-20260823: 兼容 deepseek-<agent> 专用 provider·
+                #    通用 deepseek 节点被移除后池仍需 deepseek 条目·agent 绑定依赖)
+                _ds_ids = set()
+                for _pid, _mids in provider_models.items():
+                    if _pid == "deepseek" or _pid.startswith("deepseek-"):
+                        _ds_ids.update(_mids)
+                if "deepseek-v4-flash" in _ds_ids:
                     chain.append(entry("deepseek-v4-flash", "deepseek", 0.70, 0.30,
                                        "$0.14/$0.28"))
                 # 3) token-plan(qwen3.6-flash 等)
@@ -793,6 +798,14 @@ class ModelRouter:
             if bound:  # 绑定 provider 有可用 model → 只用它
                 self._audit_switch(tier, _ab_from, bound[0], "agent_binding")
                 pool = bound
+            elif bind_provider == "deepseek":
+                # C21-20260823: 池中无 deepseek 条目(配置漂移) → 构造保底条目·
+                # 绝不静默落到其他 provider (shuyu ral-b 400 死循环根因)
+                _guard = {"model": "deepseek-v4-flash", "provider": "deepseek",
+                          "credit": False, "quality": 0.70, "latency": 0.30,
+                          "cost": "$0.14/$0.28"}
+                self._audit_switch(tier, _ab_from, _guard, "agent_binding_guard")
+                pool = [_guard]
 
         # credit_mode过滤
         if credit_mode == "avoid":

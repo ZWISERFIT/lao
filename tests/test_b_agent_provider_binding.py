@@ -26,12 +26,21 @@ def test_token_plan_quota_exhausted():
 
 
 def test_baron_failover_when_token_plan_dead():
-    """token-plan 耗尽 → baron 自动 failover(不选 token-plan)。"""
+    """token-plan 耗尽 → baron 方案A降级(PRD v1.1 R2.2·2026-08-19 23:20修订)。
+
+    旧断言(22:38版·方案C): baron 换 provider 到 qwen/deepseek。
+    新规格(PRD v1.1·Stella护栏①): 同 provider 有 flash 档(qwen3.6-flash) →
+    降级 flash·不换 provider·保缓存前缀(命中率生命线)。
+    """
+    from unittest.mock import MagicMock
     r = ModelRouter()
+    r._verify_model_exists = MagicMock(return_value=True)  # 隔离网络·确定性断言
     for tier in ("ultra_light", "light", "medium", "code"):
         sel = r.route_with_budget(tier, budget=5.0, agent="baron")
-        assert sel.provider != "token-plan", f"baron/{tier} 不应走耗尽的 token-plan"
-        assert sel.provider in ("qwen", "deepseek"), f"baron/{tier} → {sel.provider}"
+        assert sel.provider == "token-plan", \
+            f"baron/{tier} 方案A应留在 token-plan(降级flash)·实际 {sel.provider}"
+        assert "flash" in sel.model, \
+            f"baron/{tier} 应降级到同 provider flash 档·实际 {sel.model}"
 
 
 def test_shuyu_routes_in_deepseek():

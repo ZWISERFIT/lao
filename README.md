@@ -130,6 +130,36 @@ ZWISERFIT 9-Agent Collective 全栈跑在自己的 LAO 上——每个 Agent 的
 
 ---
 
+## 发布范围说明（v3.6.0-r3）
+
+本仓库开源的是**配方**：LAO 的路由、认知锚点、经验闭环，以及 RIS 健康门的实现代码与回归测试。
+
+以下内容**不在本次开源范围内**，属运营侧部署，已列入路线图：
+
+- **排序权重数值**（`lao/effect_anchored/weights.json`）：加载接口与应用方式开源，权重数值不入库。文件缺失时回退为均权，功能可用但不含我们的认知偏置。
+- **监控与门禁**：成本漂移告警、数据新鲜度告警、软启动门禁、单实例托管（systemd）、部署后版本校验、账单对账，均为运营侧脚本，开源版暂不包含。
+- **内部运行数据**：事故记录、经验库、运行态快照、密钥与环境变量。
+
+也就是说：开源版**包含产品代码内的保险丝**（重试上限与任务级 token 熔断、4xx 真实状态码透传、配对感知的上下文剪枝、provider 隔离冷却与数据时效过滤），但**不包含运营侧的监控与门禁**。自建部署请自备监控。
+
+本次为**带保险丝的发布**，不声称零缺陷。
+
+### Scope of this release (English)
+
+This repository open-sources the *recipe*: LAO routing, cognitive anchoring, the experience loop, and the RIS health gate, with their regression tests.
+
+Not included in this release (operations-side, on the roadmap):
+
+- **Ranking weight values** (`lao/effect_anchored/weights.json`) — the loading interface is open, the values are not committed. When the file is absent, the engine falls back to uniform weights: usable, but without our tuning.
+- **Monitoring and gating** — cost-drift alerts, data-freshness alerts, soft-start gating, single-instance supervision (systemd), post-deploy version verification, and billing reconciliation are ops-side scripts and are not shipped here.
+- **Internal runtime data** — incident records, experience stores, runtime snapshots, secrets and environment files.
+
+In short: the fuses that live in the product code are included (retry ceiling and per-task token cutoff, real 4xx status pass-through, pair-aware context pruning, provider isolation cooldown and staleness filtering). The ops-side monitoring and gating are not. Bring your own monitoring.
+
+This is a **release with fuses**, not a claim of zero defects.
+
+---
+
 ## Documentation
 
 详见 `docs/` 与各模块 docstring。
@@ -140,4 +170,4 @@ ZWISERFIT 9-Agent Collective 全栈跑在自己的 LAO 上——每个 Agent 的
 
 ## License
 
-Apache-2.0 · MIT (PoPB 协议)
+Apache-2.0（以仓库根目录 LICENSE 文件为准）

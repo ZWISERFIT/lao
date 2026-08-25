@@ -35,6 +35,17 @@ def load_events(path: str = RIS_EVENT_LOG) -> list:
     return events
 
 
+
+
+def load_rules() -> list:
+    """RIS-RULE规则库(2026-08-25第④步: 演习失误教训固化为识别规则)。"""
+    rp = os.path.join(OUT_DIR, "ris_rules.json")
+    try:
+        with open(rp, encoding="utf-8") as f:
+            return json.load(f).get("rules", [])
+    except Exception:
+        return []
+
 def build_summary(events: list) -> dict:
     """聚合 RIS 事件为决策摘要(按类型/严重度/对象/时段)。"""
     by_type = defaultdict(int)
@@ -46,9 +57,19 @@ def build_summary(events: list) -> dict:
         by_agent[e.get("agent_id", "unknown")] += 1
 
     # 活跃风险(最近事件·detected 状态)
+    # C8(2026-08-23): 时效过滤——超 15 分钟的旧 detected 事件不再算"活跃"风险
+    # (RIS 安静时日志尾部全为旧事件·会误导 LAO 健康门误阻断 provider)。
+    from datetime import timezone as _tz
+    _now_ts = datetime.now(_tz.utc).timestamp()
     active_risks = []
     for e in events[-20:]:
         if e.get("status") == "detected":
+            try:
+                _age = _now_ts - datetime.fromisoformat(e.get("ts", "")).timestamp()
+            except Exception:
+                _age = 0.0
+            if _age > 900.0:
+                continue
             active_risks.append({
                 "event_type": e.get("event_type"),
                 "agent_id": e.get("agent_id"),
@@ -83,6 +104,7 @@ def _recommend(by_type: dict, by_severity: dict) -> str:
 def dump_summary():
     events = load_events()
     summary = build_summary(events)
+    summary["rules"] = load_rules()
     out_path = os.path.join(OUT_DIR, "ris_summary.json")
     os.makedirs(OUT_DIR, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:

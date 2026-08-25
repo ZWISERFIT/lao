@@ -51,6 +51,12 @@ DEFAULT_HOME = os.environ.get(
     os.path.join(os.path.expanduser("~"), ".lao", "experience-loop"),
 )
 
+# R4.2(2026-08-19 PRD v1.1): LAO→RIS 反哺桥路径(共享态·创始人22:51令·数据飞轮)
+# 路径解析: 显式参数 > 环境变量 LAO_RIS_BRIDGE_FILE > 生产共享态默认值
+DEFAULT_RIS_BRIDGE_FILE = os.environ.get(
+    "RIS_BRIDGE_FILE", os.path.expanduser("~/shared/state/ris-bridge.json")
+)
+
 # 确权前幻觉门校验的锚点结构 schema(缺字段/类型错 = 不确权·减少幻觉)
 ANCHOR_SCHEMA = {
     "type": "object",
@@ -172,11 +178,15 @@ class ExperienceLoop:
                 pass  # L3 检查失败不影响路由
         return res
 
-    def l3_route_result_fanout(self, out_dir: str = "data") -> Dict[str, Any]:
+    def l3_route_result_fanout(self, out_dir: str = "data",
+                               bridge_file: Optional[str] = None) -> Dict[str, Any]:
         """W9 创始人修正1: 路由结果经验分流。
 
         - agent_runtime 锚点 → 自动同步 Momo(不走授权流程)
         - user_personal/collaborative 锚点 → 累计≥3条 → 授权请求
+        - R4.2(2026-08-19): bridge_file 显式传入(或 LAO_RIS_BRIDGE_FILE 已设)时
+          额外反哺 ris-bridge.json 的 lao_feedback 段。默认不写共享态——
+          库代码不得未经许可写工作目录之外的路径(测试/内嵌调用零副作用)。
         """
         try:
             anchors = self.anchor_store.lookup()[:50]
@@ -192,9 +202,128 @@ class ExperienceLoop:
             if need_consent:
                 _r = self.l3_check_and_request_authorization(out_dir=out_dir)
                 out["consent_triggered"] = bool(_r.get("requested"))
+            if bridge_file is None:
+                bridge_file = os.environ.get("LAO_RIS_BRIDGE_FILE") or None
+            if bridge_file:
+                out["bridge_feedback"] = self.l3_feedback_to_bridge(
+                    bridge_file=bridge_file)
             return out
         except Exception:
             return {"agent_runtime_synced": 0, "consent_triggered": False}
+
+    def l3_feedback_to_bridge(self, bridge_file: Optional[str] = None,
+                               recent_limit: int = 20) -> Dict[str, Any]:
+        """R4.2(2026-08-19 PRD v1.1): LAO 路由结果反哺 → ris-bridge.json。
+
+        把 LAO 侧路由统计(provider/model/命中率/成本)写入共享桥的
+        `lao_feedback` 段·闭合创始人 22:51 令的数据飞轮(RIS→LAO→RIS)。
+
+        铁律: 只写共享 JSON·不 import ris 包(物理隔离)。read-modify-write
+        + 原子替换(tmp+replace)·只更新 lao_feedback 键·保留 RIS 写入的其他段。
+        fail-open: 任何异常返回 {"ok": False}·绝不阻塞路由。
+
+        数据源:
+          - 路由结果: FeedbackBus 内存事件(source=l1_router·provider/model/成功失败)
+          - 命中率/成本: 经验库 lao_experiences.jsonl(cache_hit/actual_cost·按 provider)
+        """
+        try:
+            from datetime import datetime, timezone
+            path = bridge_file or os.environ.get("LAO_RIS_BRIDGE_FILE") \
+                or DEFAULT_RIS_BRIDGE_FILE
+
+            # ── ① 路由结果统计(总线 l1_router 事件·含成功与失败) ──
+            routes = []
+            for e in getattr(self.bus, "_events", []) or []:
+                p = getattr(e, "payload", None) or {}
+                if getattr(e, "source", "") != "l1_router":
+                    continue
+                if "success" not in p or "provider" not in p or "model" not in p:
+                    continue  # 跳过 conflict/usage_missing 派生事件(避免重复计数)
+                routes.append(p)
+            total = len(routes)
+            ok_n = sum(1 for p in routes if p.get("success"))
+            by_provider: Dict[str, Any] = {}
+            for p in routes:
+                prov = str(p.get("provider", "?"))
+                m = by_provider.setdefault(prov, {"total": 0, "success": 0, "models": {}})
+                m["total"] += 1
+                if p.get("success"):
+                    m["success"] += 1
+                mid = str(p.get("model", "?"))
+                m["models"][mid] = m["models"].get(mid, 0) + 1
+            recent = [{
+                "provider": p.get("provider"), "model": p.get("model"),
+                "success": bool(p.get("success")),
+                "error": (str(p.get("error") or "")[:120]) or None,
+            } for p in routes[-recent_limit:]]
+
+            # ── ② 命中率/成本(经验库 cache_hit/actual_cost·按 provider 聚合) ──
+            hit_rate = None
+            cost_total = 0.0
+            cost_by_provider: Dict[str, float] = {}
+            try:
+                from lao.effect_anchored.experience_extractor import ExperienceExtractor
+                store = os.environ.get("LAO_EXPERIENCE_STORE",
+                                       ExperienceExtractor.STORE_PATH)
+                if os.path.exists(store):
+                    hits = n = 0
+                    with open(store, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                rec = json.loads(line)
+                            except Exception:
+                                continue
+                            n += 1
+                            if rec.get("cache_hit"):
+                                hits += 1
+                            c = float(rec.get("actual_cost", 0) or 0)
+                            cost_total += c
+                            prov = str(rec.get("provider_used") or "?")
+                            cost_by_provider[prov] = \
+                                round(cost_by_provider.get(prov, 0.0) + c, 6)
+                    if n:
+                        hit_rate = round(hits / n, 4)
+            except Exception:
+                pass  # 经验库缺件 → 命中率/成本留空(不阻塞)
+
+            feedback = {
+                "layer": "lao",
+                "schema_version": "1.0",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "route_stats": {
+                    "total": total, "success": ok_n, "failed": total - ok_n,
+                    "success_rate": round(ok_n / total, 4) if total else None,
+                    "by_provider": by_provider,
+                },
+                "hit_rate": hit_rate,
+                "cost": {"total_actual_cost": round(cost_total, 6),
+                         "by_provider": cost_by_provider},
+                "recent_routes": recent,
+            }
+
+            # ── ③ read-modify-write: 只更新 lao_feedback 键·保留 RIS 其他段 ──
+            base: Dict[str, Any] = {}
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    base = loaded
+            except Exception:
+                base = {}
+            base.setdefault("layer", "ris")
+            base.setdefault("schema_version", "1.0")
+            base["lao_feedback"] = feedback
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            tmp = path + ".lao.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(base, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, path)
+            return {"ok": True, "bridge_file": path, "lao_feedback": feedback}
+        except Exception as e:
+            return {"ok": False, "reason": str(e)}
 
     def l3_sync_agent_runtime_to_momo(self, anchors: List[Dict[str, Any]],
                                       out_dir: str = "data") -> int:

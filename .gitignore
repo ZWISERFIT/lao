@@ -9,3 +9,64 @@ lao/evolution/registry/test-registry/
 lao/evolution/registry/constraints/C-*.json
 lao/evolution/registry/logs/*.jsonl
 lao/effect_anchored/weights.json
+
+# --- gate-1 hardening (2026-08-25) ---
+# secrets and environment files
+*.env
+!*.env.example
+*secrets*
+# internal reports, work orders, acceptance evidence (not part of the recipe)
+AIreports/
+*-WORK-ORDER-*.md
+docs/llm-bench/
+QODER_AUDIT_REPORT.md
+TRISTAN_AUDIT_REPORT.md
+# scratch, probe and backup files
+*.bak
+*.bak-*
+*.bak_*
+tmp_*.py
+tmp_check*.py
+tmp_verify*.py
+verify_sample.py
+check_sample.py
+# runtime state, experience stores and internal operating records
+lao/effect_anchored/data/*.jsonl
+lao/effect_anchored/data/provider-blacklist.json
+lao/effect_anchored/evolution/.pattern_registry.json
+lao/routing_cost_log.json
+lao/switch_audit.jsonl
+ris/experience/data/
+ris/state/data/
+tests/data/
+# experiment scaffolding, kept internal for now
+mvp/
+ris_agent/
+
+# --- internal reports batch2 (2026-08-25) ---
+LAO_v3.5_acceptance_report.md
+LAO_v3.5_tech_spec.md
+lao/.gitignore
+docs/INCIDENT-RECOVERY-PRD-*
+docs/LAO-Enterprise-Architecture-Document-*
+docs/LAO-Enterprise-验收证据-*
+docs/LAO-成功率门禁-螺丝根治-*
+docs/LAO-L3-FULL-LOOP-FIX-*
+docs/LAO-P0-06-*
+docs/LAO-Public-Release-Checklist-*
+docs/LAO-RIS-Architecture-Separation-Report-*
+docs/LAO-architecture-review-*
+docs/LAO_MVP_real_world_acceptance.*
+docs/LAO_v3.5_acceptance_report.*
+docs/QODER-*
+docs/RIS-Audit-Report-*
+docs/RIS-Runtime-Status-Report-*
+docs/RIS-v1.0-Report-*
+docs/Stella-*
+docs/product-unit-autonomy-*
+# internal-only tests (depend on internal incident data / absolute paths)
+tests/acceptance_test.py
+tests/real_world_acceptance.py
+tests/test_incident_regression.py
+# orphan module, no reference from any published code
+lao/effect_anchored/routing/per_agent_token_ledger.py

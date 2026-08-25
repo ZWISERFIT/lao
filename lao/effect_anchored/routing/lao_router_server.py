@@ -59,6 +59,15 @@ LOG_DIR = "/home/agentuser/.openclaw/workspace/tristan/tech_lead/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 EVENT_LOG = os.path.join(LOG_DIR, "lao-router-events.jsonl")
 
+# ── r3(2026-08-25 创始人命令·有条件解冻) 任务级成本护栏 ─────────────
+# C22 单任务 token 上限告警+熔断 / 盲点3 重试计数上限。
+# 阈值为暂定值(A11 基线出具后校准·可用环境变量覆盖):
+#   告警 30M tokens/任务 · 熔断 50M tokens/任务 · 同 payload 重试上限 5 次
+R3_TASK_ALERT_TOKENS = int(os.environ.get("R3_TASK_ALERT_TOKENS", "30000000"))
+R3_TASK_HARD_TOKENS = int(os.environ.get("R3_TASK_HARD_TOKENS", "50000000"))
+R3_MAX_RETRIES = int(os.environ.get("R3_MAX_RETRIES", "5"))
+R3_LEDGER = os.path.join(LOG_DIR, "r3_task_token_ledger.json")
+
 # DeepSeek 真实端点
 DEEPSEEK_BASE = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 # key 来源: 环境变量(OpenClaw secrets 注入) 或 secrets.env
@@ -106,6 +115,13 @@ PROVIDER_CONFIG = {
         "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         "api_key": DEEPSEEK_KEY,
     },
+    "qwen": {
+        # C9(2026-08-23): ModelRouter 从 openclaw.json 构建的池含 provider="qwen"
+        # (dashscope 直连·qwen3.7-flash 等)·但本表缺失 → _provider_client 回退
+        # deepseek 配置·DeepSeek API 收到 qwen 模型名 → 400 invalid_request_error。
+        "base_url": os.environ.get("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+        "api_key": _read_secret("OC_QWEN_API_KEY") or os.environ.get("OC_QWEN_API_KEY", ""),
+    },
     "token-plan": {
         "base_url": os.environ.get("TOKEN_PLAN_BASE_URL", "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"),
         "api_key": _read_secret("OC_TOKEN_PLAN_API_KEY"),
@@ -144,6 +160,15 @@ def _extract_agent(model_hint: str, headers: Dict) -> str:
         for agent in AGENT_KEYS:
             if prefix.endswith(agent):
                 return agent
+    # C16(2026-08-23): key 反查 — Authorization Bearer 里的 per-agent key 即身份证明。
+    # 网关(OpenClaw)发往 LAO 的请求会剥掉 model 的 provider 前缀, 但 Authorization
+    # 保留 provider 条目各自的 key(deepseek-<agent> 条目 → <agent> 独立 key)。
+    _auth = (headers.get("authorization") or "").strip()
+    if _auth.lower().startswith("bearer "):
+        _k = _auth[7:].strip()
+        for _a, _ak in AGENT_KEYS.items():
+            if _ak and _k == _ak:
+                return _a
     return ""
 
 def _provider_client(provider: str, agent: str = ""):
@@ -246,6 +271,12 @@ def _loop_record(provider: str, model: str, ok: bool, error: str = "") -> None:
         LOOP.record_route_result(provider, model, ok, error)
     except Exception as e:
         logger.warning(f"loop record fail: {e}")
+    # R4.2(2026-08-19 PRD v1.1): LAO→RIS 反哺 — 路由结果写入共享桥
+    # ris-bridge.json 的 lao_feedback 段(不 import ris 包·fail-open 不阻塞路由)
+    try:
+        LOOP.l3_feedback_to_bridge()
+    except Exception as e:
+        logger.warning(f"loop bridge feedback fail: {e}")
 
 
 # ── 会话粘性(2026-08-16 L1命中率·最有效手段): 同一会话粘住同 provider+model ──
@@ -344,6 +375,8 @@ def _sticky_usable(entry: Dict, tier: str, agent: str, cur_provider: str) -> boo
 HITRATE_MIN_SAMPLES = 10
 HITRATE_LOW_BAR = 0.60
 HITRATE_SWAP_GAP = 0.15
+HITRATE_WINDOW_SAMPLES = 10  # L-06: 窗口长度=MIN_SAMPLES(创始人裁定2026-08-25: 10样本触发告警)
+_hitrate_low_state = {}      # L-06两级状态: provider -> {alerted_count}
 
 
 def _provider_cache_hit_rate(provider: str) -> Optional[float]:
@@ -357,6 +390,26 @@ def _provider_cache_hit_rate(provider: str) -> Optional[float]:
     return round(hit / (hit + miss), 4) if hit + miss else None
 
 
+def _hitrate_escalate(provider: str, cur_rate: float) -> bool:
+    """L-06 两级机制(创始人裁定2026-08-25): 维持10样本门槛——
+    首窗口(10样本)低于LOW_BAR仅告警不动作; 连续第二个窗口(再10样本)仍低才升级熔断(允许换路)。"""
+    with _signal_lock:
+        dq = _signal_window.get(provider)
+        n = len(dq) if dq else 0
+    st = _hitrate_low_state.get(provider)
+    if st is None:
+        _hitrate_low_state[provider] = {"alerted_count": n}
+        _log_event({"type": "hitrate_low_alert", "provider": provider,
+                    "rate": cur_rate, "samples": n, "tier": "alert_only"})
+        return False
+    if n - st["alerted_count"] >= HITRATE_WINDOW_SAMPLES:
+        _log_event({"type": "hitrate_low_alert", "provider": provider,
+                    "rate": cur_rate, "samples": n, "tier": "escalate_swap"})
+        _hitrate_low_state.pop(provider, None)
+        return True
+    return False
+
+
 def _prefer_hitrate_provider(sel: RouteSelection) -> RouteSelection:
     """实测命中率反馈: 首选 provider 命中率显著低且 fallback 有明显更优者 → 切换。
 
@@ -364,7 +417,12 @@ def _prefer_hitrate_provider(sel: RouteSelection) -> RouteSelection:
     """
     cur_rate = _provider_cache_hit_rate(sel.provider)
     if cur_rate is not None and cur_rate >= HITRATE_LOW_BAR:
+        _hitrate_low_state.pop(sel.provider, None)  # L-06: 命中率恢复, 重置升级状态
         return sel
+    if cur_rate is None:
+        return sel  # L-06: 样本不足10个, 不判定不动作(维持10样本门槛)
+    if not _hitrate_escalate(sel.provider, cur_rate):
+        return sel  # L-06两级: 仅告警档, 未连续两窗口, 不升级熔断
     for fc in sel.fallback_chain:
         try:
             prov, model = fc.split("/", 1)
@@ -660,7 +718,11 @@ def _safe_payload(body: dict, chosen_model: str) -> tuple[dict, list]:
     #      → DeepSeek 400 "reasoning_content in thinking mode must be passed back"
     #   ② thinking 被 drop 时 pop tool_calls → 工具链断裂 → 另两类 400
     # 我们所有模型 thinking=False → 永不转发 thinking 模式 → reasoning_content 必须全清。
-    if not thinking_enabled:
+    # C19(2026-08-23): thinking 块规范化(content数组 → reasoning_content 字段)
+    _normalize_thinking_blocks(payload.get("messages", []))
+    # C19: DeepSeek v4 系为思考模式(reasoning_content 必须随历史回传) → 保留字段;
+    #      其他上游(qwen/token-plan 降级通道)照旧全清, 避免 unknown-field 400。
+    if not thinking_enabled and not str(chosen_model).startswith("deepseek-"):
         _strip_reasoning_content(payload.get("messages", []))
     return payload, events
 
@@ -690,12 +752,81 @@ def _stabilize_messages(messages: list, max_history: int = 30) -> list:
             m = dict(m)
             m["content"] = _TIMESTAMP_PAT.sub("", c)  # 移除动态时间戳行
         out.append(m)
-    # 历史剪枝: 保留 system + 前 max_history-1 条早期 + 最后 1 条(当前请求)
+    # 历史剪枝: 保留 system + 前段稳定历史 + 尾段当前请求
     if len(out) > max_history:
         # 修复(2026-08-16 三层审计): 旧实现 out[:max_history] 会丢掉最末尾的
         # 当前用户消息 → 请求语义被改变 + 前缀与客户端预期错位(伤命中率)。
-        out = out[:max_history - 1] + out[-1:]
+        # C18(2026-08-23): 配对感知剪枝 — 旧版 out[:max_history-1]+out[-1:] 的两个
+        # 切点若落在 assistant(tool_calls)/tool 配对中间 → 孤儿消息 → DeepSeek 400
+        # "Messages with role 'tool' must be a response to a preceding message with
+        # 'tool_calls'"(shuyu 记忆工具链实测触发, 09:52 三连 400)。切点必须落在
+        # 回合边界: 切点前一条不能是未闭合的 tool_calls-assistant, 切点后一条
+        # 不能是 tool。正确性优先: 极端长工具链下允许剪枝退化(保整段)。
+        def _opens_pair(m):
+            return isinstance(m, dict) and m.get("role") == "assistant" and bool(m.get("tool_calls"))
+
+        def _is_tool(m):
+            return isinstance(m, dict) and m.get("role") == "tool"
+
+        # 尾段: 从末条回溯, 把未闭合的 tool 结果与其配对 assistant 整段带上
+        tail = len(out) - 1
+        while tail > 0 and _is_tool(out[tail]):
+            tail -= 1
+        # 尾段起点前一条若也是开启配对的 assistant(连续工具轮) → 继续向前扩展
+        while tail > 1 and _opens_pair(out[tail - 1]):
+            tail -= 1
+        # 头段: 预算 max_history-1 内回退到安全切点
+        cut = min(max_history - 1, tail)
+        while cut > 1 and (_is_tool(out[cut]) or _opens_pair(out[cut - 1])):
+            cut -= 1
+        out = out[:cut] + out[tail:]
     return out
+
+
+def _normalize_thinking_blocks(messages: list):
+    """C19(2026-08-23): assistant content 数组里的 thinking 块规范化。
+
+    背景(ral-b 400 死循环根因):
+    - DeepSeek v4 思考模式输出 reasoning_content → OpenClaw 存为 content 数组
+      里的 thinking 块(thinkingSignature=reasoning_content)回传。
+    - DeepSeek API 不认 content 数组里的 thinking 变体
+      → 400 "unknown variant `thinking`, expected one of `text`,`image_url`..."
+      (或思考痕迹被剥后) 400 "reasoning_content ... must be passed back"。
+    根治: thinking 块文本 → 消息顶层 reasoning_content 字段(DeepSeek 标准回传格式),
+          content 数组只留 text 等标准块; DeepSeek 通道保留该字段不 strip。
+    """
+    for m in messages:
+        if not (isinstance(m, dict) and m.get("role") == "assistant"):
+            continue
+        c = m.get("content")
+        if not isinstance(c, list):
+            continue
+        thinks = [b for b in c if isinstance(b, dict) and b.get("type") == "thinking"]
+        if not thinks:
+            continue
+        others = [b for b in c if not (isinstance(b, dict) and b.get("type") == "thinking")]
+        rc = "\n".join(t.get("thinking") or "" for t in thinks if t.get("thinking"))
+        if rc:
+            prev = m.get("reasoning_content") or ""
+            m["reasoning_content"] = (prev + "\n" + rc).strip() if prev else rc
+        m["content"] = others if others else ""
+        if not m.get("content") and not m.get("tool_calls"):
+            m["content"] = ""
+    return messages
+
+def _ensure_toolcall_rc(payload):
+    """C22v2-20260823: deepseek thinking 模式在 tool 续传轮要求**最后一条
+    user 之后的全部 assistant**回传 reasoning_content (含纯文本 assistant·
+    diagnose61 X3 实测: 只补 [28] 纯文本 assistant 即 200)·
+    OpenClaw 出站全部不带 → 统一注入占位 (X5 全量注入 200·X9 user结尾安全)"""
+    msgs = payload.get("messages") or []
+    n = 0
+    for m in msgs:
+        if (m.get("role") == "assistant"
+                and not m.get("reasoning_content")):
+            m["reasoning_content"] = "(elided)"
+            n += 1
+    return n
 
 
 def _strip_reasoning_content(messages: list):
@@ -746,6 +877,12 @@ def _reset_daily_if_needed():
         if _daily_cost["date"] != today:
             _daily_cost["date"] = today
             _daily_cost["total_usd"] = 0.0
+    # r3: 跨天同步重置任务级台账(新的一天·任务 token 从零计)
+    try:
+        with _r3_lock:
+            _r3_rollover_locked()
+    except Exception:
+        pass
 
 
 # ── 任务分层(tier)启发式 ──────────────────────────
@@ -803,6 +940,149 @@ def _log_event(ev: Dict[str, Any]):
         ev["agent"] = "unknown"
     with open(EVENT_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(ev, ensure_ascii=False, default=str) + "\n")
+
+
+# ── r3 任务级成本护栏(盲点1: token上限告警+熔断 · 盲点3: 重试计数上限) ──
+_r3_lock = threading.Lock()
+_r3_state: Dict[str, Any] = {"tasks": {}, "date": time.strftime("%Y-%m-%d")}
+
+
+def _r3_load_ledger():
+    """启动时恢复当日台账(跨重启不丢熔断状态)。"""
+    global _r3_state
+    try:
+        with open(R3_LEDGER, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        if isinstance(d, dict) and d.get("date") == time.strftime("%Y-%m-%d"):
+            _r3_state = d
+    except Exception:
+        pass
+
+
+def _r3_save_ledger_locked():
+    try:
+        with open(R3_LEDGER, "w", encoding="utf-8") as f:
+            json.dump(_r3_state, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _r3_rollover_locked():
+    today = time.strftime("%Y-%m-%d")
+    if _r3_state.get("date") != today:
+        _r3_state["date"] = today
+        _r3_state["tasks"] = {}
+        _r3_save_ledger_locked()
+
+
+def _r3_task_key(agent: str, session_fp: str) -> str:
+    return f"{agent or 'unknown'}|{session_fp or 'nofp'}"
+
+
+def _r3_add_tokens(agent: str, session_fp: str, tokens: int):
+    """结算时累计任务 token · 越限即打告警/熔断标记(下一次请求入口拦截)。"""
+    if tokens <= 0:
+        return
+    key = _r3_task_key(agent, session_fp)
+    with _r3_lock:
+        _r3_rollover_locked()
+        t = _r3_state["tasks"].setdefault(
+            key, {"tokens": 0, "alerted": False, "broken": False})
+        t["tokens"] += int(tokens)
+        crossed_alert = (not t["alerted"]) and t["tokens"] >= R3_TASK_ALERT_TOKENS
+        crossed_hard = (not t["broken"]) and t["tokens"] >= R3_TASK_HARD_TOKENS
+        if crossed_alert:
+            t["alerted"] = True
+        if crossed_hard:
+            t["broken"] = True
+        _r3_save_ledger_locked()
+    if crossed_alert:
+        _log_event({"type": "r3_token_alert", "agent": agent or "unknown",
+                    "task_key": key, "tokens": t["tokens"],
+                    "threshold": R3_TASK_ALERT_TOKENS})
+    if crossed_hard:
+        _log_event({"type": "r3_token_breaker", "agent": agent or "unknown",
+                    "task_key": key, "tokens": t["tokens"],
+                    "threshold": R3_TASK_HARD_TOKENS,
+                    "action": "subsequent_requests_rejected_429"})
+
+
+def _r3_task_guard(key: str, agent: str, request_id: str):
+    """入口拦截: 已熔断的任务立即 429(熔断到停止计费即时生效)。"""
+    with _r3_lock:
+        _r3_rollover_locked()
+        t = _r3_state["tasks"].get(key)
+        tokens = t["tokens"] if t else 0
+        broken = bool(t and t.get("broken"))
+    if broken:
+        _log_event({"type": "r3_task_rejected", "request_id": request_id,
+                    "agent": agent or "unknown", "task_key": key,
+                    "tokens": tokens, "threshold": R3_TASK_HARD_TOKENS})
+        return JSONResponse(
+            {"error": {"message": (
+                f"task token budget exhausted ({tokens} >= {R3_TASK_HARD_TOKENS}); "
+                "task circuit-broken by LAO r3 guard; "
+                "founder order 2026-08-25: stop billing immediately"),
+                "type": "lao_router_task_breaker",
+                "lao_task_tokens": tokens}},
+            status_code=429)
+    return None
+
+
+def _r3_retry_check(key: str, agent: str, request_id: str,
+                    messages: List[Dict], model_hint: str):
+    """盲点3: 同会话同 payload 10 分钟内重发 = 重试 · 计数上报 · 超限熔断。"""
+    import hashlib
+    try:
+        _canon = json.dumps({"m": messages, "model": model_hint},
+                            ensure_ascii=False, sort_keys=True, default=str)
+        ph = hashlib.sha1(_canon.encode("utf-8")).hexdigest()[:16]
+    except Exception:
+        return None
+    now = time.time()
+    with _r3_lock:
+        _r3_rollover_locked()
+        t = _r3_state["tasks"].setdefault(
+            key, {"tokens": 0, "alerted": False, "broken": False})
+        rp = t.get("retry_payload", "")
+        rts = float(t.get("retry_ts", 0.0))
+        cnt = int(t.get("retry_count", 0))
+        if rp == ph and (now - rts) <= 600:
+            cnt += 1
+        else:
+            cnt = 0
+        t["retry_payload"], t["retry_ts"], t["retry_count"] = ph, now, cnt
+        _r3_save_ledger_locked()
+    if cnt > 0:
+        _log_event({"type": "r3_retry", "request_id": request_id,
+                    "agent": agent or "unknown", "task_key": key,
+                    "retry_seq": cnt, "max": R3_MAX_RETRIES})
+    if cnt > R3_MAX_RETRIES:
+        _log_event({"type": "r3_retry_breaker", "request_id": request_id,
+                    "agent": agent or "unknown", "task_key": key,
+                    "retry_seq": cnt, "max": R3_MAX_RETRIES})
+        return JSONResponse(
+            {"error": {"message": (
+                f"identical request retried {cnt} times within 10min "
+                f"(limit {R3_MAX_RETRIES}); blocked by LAO r3 retry guard"),
+                "type": "lao_router_retry_breaker",
+                "lao_retry_count": cnt}},
+            status_code=429)
+    return None
+
+
+def _r3_status():
+    with _r3_lock:
+        tasks = {k: dict(v) for k, v in _r3_state.get("tasks", {}).items()}
+        date = _r3_state.get("date")
+    top = sorted(tasks.items(), key=lambda kv: -kv[1].get("tokens", 0))[:10]
+    return {"date": date,
+            "thresholds": {"alert": R3_TASK_ALERT_TOKENS,
+                           "hard": R3_TASK_HARD_TOKENS,
+                           "max_retries": R3_MAX_RETRIES},
+            "top_tasks": [{"task_key": k, "tokens": v.get("tokens", 0),
+                           "alerted": v.get("alerted", False),
+                           "broken": v.get("broken", False)} for k, v in top]}
 
 
 def _model_quality(model: str, tier: str) -> float:
@@ -917,6 +1197,11 @@ def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
     degraded = "flash" in chosen_model and "pro" in str(model_hint).lower()
     cost_yuan, pricing_regime, pricing_window, fx = _compute_cost_yuan(chosen_model, cache_hit, cache_miss, out_tok)
     _record_cost(cost_yuan / fx)
+    # r3 盲点1: 任务级 token 累计(越限告警/熔断由下一次请求入口拦截·fail-open 不阻塞结算)
+    try:
+        _r3_add_tokens(agent, session_fp, int(in_tok or 0) + int(out_tok or 0))
+    except Exception:
+        pass
     baseline_model = (model_hint.split("/")[-1] if model_hint else "") or "deepseek-v4-pro"
     saving_ev = savings_engine.compute_saving(
         agent_id=agent or "unknown", task_type=tier,
@@ -977,6 +1262,15 @@ def loop_status():
         return {"enabled": True, **LOOP.status()}
     except Exception as e:
         return {"enabled": True, "error": str(e)}
+
+
+@app.get("/v1/r3/status")
+def r3_status():
+    """r3(2026-08-25 创始人命令): 任务级 token 台账与熔断状态(监控消费)。"""
+    try:
+        return _r3_status()
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.post("/v1/chat/completions")
@@ -1055,6 +1349,19 @@ async def chat_completions(request: Request):
     _total_chars = sum(len(str(m.get("content", ""))) for m in messages if isinstance(m, dict))
     context_tokens = int(_total_chars * 0.75)  # CJK≈1字1token·ASCII≈4字1token 的折中估算
     session_fp = _session_fingerprint(messages)
+
+    # r3 盲点1/3(2026-08-25 创始人命令): 任务级 token 熔断 + 重试上限
+    # 前置拦截 — 已熔断任务立即 429(熔断到停止计费即时生效·不产生任何 token 花费)
+    _r3_key = _r3_task_key(agent, session_fp)
+    try:
+        _r3_blk = _r3_task_guard(_r3_key, agent, request_id)
+        if _r3_blk is not None:
+            return _r3_blk
+        _r3_rblk = _r3_retry_check(_r3_key, agent, request_id, messages, model_hint)
+        if _r3_rblk is not None:
+            return _r3_rblk
+    except Exception:
+        pass  # fail-open: 护栏自身故障不得阻塞路由(但会在日志缺失护栏事件·监控侧可查)
 
     # v3.5.1-wiring: W3 经验直答·双重确认(经验匹配 + 认知匹配 才全短路·省100%成本)
     _exp_match = None
@@ -1148,6 +1455,23 @@ async def chat_completions(request: Request):
         sel_c = _prefer_hitrate_provider(sel_c)
         chosen_model, chosen_provider = sel_c.model, sel_c.provider
 
+    # C14(2026-08-23): 显式模型直通(修正版·置于粘性之后) — 请求 model 的模型名
+    # 在动态池中存在时锁定 (provider, model), 覆盖效果锚定与粘性的自主改写。
+    # 优先 provider=deepseek 条目(官方通道对 deepseek-* 模型名最可靠)。
+    # 此前: 自主改写(deepseek-v4-flash→qwen-plus)+RIS摘除qwen后仅换provider不换
+    # 模型名 → qwen系模型名发阿里云/官方 → 400/401 连环失败。
+    _hint_model = model_hint.split("/")[-1] if model_hint else ""
+    if _hint_model:
+        _cands = []
+        for _pool in router.MODEL_POOL.values():
+            for _pe in _pool:
+                if _pe.get("model") == _hint_model:
+                    _cands.append(_pe)
+        if _cands:
+            _hit = next((_pe for _pe in _cands if _pe.get("provider") == "deepseek"), _cands[0])
+            chosen_model = _hit["model"]
+            chosen_provider = _hit.get("provider", chosen_provider)
+
     # B2/B5: RIS 健康门——被 RIS 阻断(down/isolated)的 provider 摘出候选·降级切换;
     # 全部候选被阻断 → 显式 503(禁止静默 fallback·ProviderHealthGate 哲学)
     chosen_provider, _block_ev = _ris_guard_provider(chosen_provider, request_id)
@@ -1157,9 +1481,20 @@ async def chat_completions(request: Request):
                        "type": "lao_router_ris_gate"}},
             status_code=503)
 
+    # C16(2026-08-23): per-agent key 边界 — 识别到 Agent 且有独立 key 时锁定 DeepSeek
+    # 官方通道, 覆盖效果锚定/粘性/RIS 降级的 provider 逃逸(novarouteai/qwen), 保证
+    # DeepSeek 后台按 key 归因每个 Agent 的真实调用; 模型名同步锁 deepseek 系防错配。
+    if agent and AGENT_KEYS.get(agent):
+        if not (chosen_provider == "deepseek" and chosen_model.startswith("deepseek-")):
+            chosen_provider = "deepseek"
+            chosen_model = _hint_model if (_hint_model or "").startswith("deepseek-") else "deepseek-v4-flash"
+
     # ③ 转发真实 provider(按 chosen_provider 动态选 base_url + key·白名单过滤+能力协商)
     client = _provider_client(chosen_provider, agent)
     payload, cap_events = _safe_payload(body, chosen_model)
+    # C22v2-20260823: deepseek thinking 强制 assistant 回传 rc → 注入占位
+    if chosen_provider == "deepseek" or str(chosen_model).startswith("deepseek-"):
+        _ensure_toolcall_rc(payload)
     # P0-2 命中率99.9%: 传独立 user_id(DeepSeek 官方 KVCache 隔离机制)
     # 每个 agent 独立 user → 缓存按 agent 隔离·前缀更稳定·miss 降(官方CSV: miss价是hit价120倍)
     # v3.4(2026-08-16): 无 agent 的裸请求按会话指纹隔离(不再共享池 → 跨会话互相冲刷缓存)
@@ -1183,7 +1518,18 @@ async def chat_completions(request: Request):
         await asyncio.to_thread(_update_lao_signal, chosen_provider, False)
         # 三层Loop(2026-08-16): 转发失败 → 错误复利回流(≥2次同类→锚点→路由约束)
         await asyncio.to_thread(_loop_record, chosen_provider, chosen_model, False, str(e)[:200])
-        return JSONResponse({"error": {"message": str(e), "type": "lao_router_forward"}}, status_code=502)
+        # C18(2026-08-23): 上游 4xx(请求本身无效)透传真实状态码。旧版统一 502 →
+        # OpenClaw failover 归类 timeout → provider 进 cooldown → 后续请求全拒
+        # (FallbackSummaryError "in cooldown")。4xx 透传让网关判定 invalid_request
+        # 不触发 cooldown; 网络/服务类错误仍按 502。
+        _status = 502
+        try:
+            _sc = int(getattr(e, "status_code", 0) or 0)
+            if 400 <= _sc < 500:
+                _status = _sc
+        except Exception:
+            pass
+        return JSONResponse({"error": {"message": str(e), "type": "lao_router_forward"}}, status_code=_status)
 
     latency_ms = int((time.time() - started) * 1000)
 
@@ -1335,5 +1681,7 @@ async def chat_completions(request: Request):
 
 
 if __name__ == "__main__":
+    _r3_load_ledger()  # r3: 恢复当日任务级 token 台账(跨重启不丢熔断状态)
     logger.info(f"lao-router 启动: :{PORT} | DeepSeek基址={DEEPSEEK_BASE} | key={'$'*8 if DEEPSEEK_KEY else 'MISSING'} | 每日预算=${DAILY_BUDGET}")
+    logger.info(f"r3 护栏: 任务告警={R3_TASK_ALERT_TOKENS} tokens · 熔断={R3_TASK_HARD_TOKENS} tokens · 重试上限={R3_MAX_RETRIES} 次(创始人命令2026-08-25)")
     uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")

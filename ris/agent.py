@@ -68,7 +68,7 @@ class RuntimeSensor:
             "mem_pct": mem.percent,
             "mem_avail_mb": round(mem.available / 1024 / 1024),
             "load_avg": os.getloadavg()[0],
-            "gateway_pid": _find_pid("gateway --port 18789"),
+            "gateway_pid": _gateway_pid(),
             "lao_router_pid": _find_pid("lao_router_server"),
             "mcp_count": _count_mcp(),
             "ts": _ts(),
@@ -96,6 +96,34 @@ def _find_pid(needle: str) -> Optional[int]:
         return int(out.split("\n")[0]) if out else None
     except Exception:
         return None
+
+
+# C8: provider_ok 事件落日志节流(每 provider 10 分钟一条·给 bridge 正向证据)
+_OK_LOG_TS: Dict[str, float] = {}
+_OK_LOG_INTERVAL_S = 600.0
+
+
+def _gateway_pid() -> Optional[int]:
+    """C7 修复(2026-08-23): 旧模式 'gateway --port 18789' 永远匹配不到实际进程
+    (systemd ExecStart=openclaw gateway run·argv0=openclaw·命令行无 --port)。
+    双通道: ① 端口 18789 监听行(健康真标准·含 pid= 提取) ② pgrep -x openclaw 兜底。"""
+    try:
+        out = subprocess.check_output(["ss", "-tlnp"], text=True,
+                                      stderr=subprocess.DEVNULL)
+        for line in out.splitlines():
+            if ":18789" in line and "openclaw" in line:
+                m = re.search(r"pid=(\d+)", line)
+                if m:
+                    return int(m.group(1))
+    except Exception:
+        pass
+    try:
+        out = subprocess.check_output(["pgrep", "-x", "openclaw"], text=True).strip()
+        if out:
+            return int(out.split("\n")[0])
+    except Exception:
+        pass
+    return None
 
 
 def _mcp_pids() -> List[str]:
@@ -245,8 +273,15 @@ class HealthMonitor:
                     provider, ev.detail.get("error") or ev.detail.get("reason", ""))
             else:
                 # 探活成功 → 失败计数复位; 隔离中的 provider 提前释放(灰度回归)
-                # (provider_ok 事件本身不落日志·避免每 30s 刷屏)
+                # C8(2026-08-23): provider_ok 以 10 分钟节流落日志——旧设计完全不落,
+                # bridge 聚合 provider_status 时只有历史失败证据·down 永久固化 →
+                # LAO 健康门全阻断 503。正向证据必须留痕(节流防刷屏)。
                 iso = isolator.record_success(provider)
+                _now_t = time.time()
+                if _now_t - _OK_LOG_TS.get(provider, 0.0) >= _OK_LOG_INTERVAL_S:
+                    _OK_LOG_TS[provider] = _now_t
+                    _emit(ev)
+                    events.append(ev)
             if iso is not None:
                 _emit(iso)
                 events.append(iso)
@@ -376,13 +411,13 @@ class RecoveryExecutor:
         C4 补完(2026-08-19 创始人令·三保险):
             旧 HealthMonitor.check_gateway 只检测(emit gateway_down)·
             从不执行恢复——1258 次检测无一次 action。本方法补完整闭环:
-                detect   → _find_pid("gateway --port 18789") 为 None
+                detect   → _gateway_pid() 为 None
                 recover  → systemctl --user restart openclaw-gateway
                 verify   → 进程重新出现(pid 存活)
                 record   → RecoveryEngine.run + 事件落盘
         """
         def detect() -> bool:
-            return _find_pid("gateway --port 18789") is None
+            return _gateway_pid() is None
 
         def diagnose() -> Dict[str, Any]:
             """P0-1 前置诊断: 读 gateway 最近日志定位根因·不盲目重启。"""
@@ -390,7 +425,7 @@ class RecoveryExecutor:
             try:
                 # 读 user 级 gateway 服务最近日志(最后40行)
                 out = subprocess.run(
-                    ["journalctl", "--user", "-u", "openclaw-gateway.service",
+                    ["sudo", "-n", "journalctl", "-u", "openclaw-gateway.service",
                      "-n", "40", "--no-pager"],
                     timeout=10, capture_output=True, text=True)
                 logs = out.stdout[-3000:] if out.stdout else ""
@@ -419,14 +454,20 @@ class RecoveryExecutor:
 
         def recover() -> bool:
             try:
-                subprocess.run(["systemctl", "--user", "restart", "openclaw-gateway.service"],
-                               timeout=20, capture_output=True)
+                # C7(2026-08-23): 系统级服务(旧 --user 打错目标·恢复恒失败);
+                # is-active 双保险: systemd 权威状态活着 → 检测误报·绝不重启
+                st = subprocess.run(["systemctl", "is-active", "openclaw-gateway.service"],
+                                    timeout=10, capture_output=True, text=True)
+                if (st.stdout or "").strip() == "active":
+                    return True
+                subprocess.run(["sudo", "-n", "systemctl", "restart", "openclaw-gateway.service"],
+                               timeout=30, capture_output=True)
                 return True
             except Exception:
                 return False
 
         def verify() -> bool:
-            return _find_pid("gateway --port 18789") is not None
+            return _gateway_pid() is not None
 
         result = self.engine.run(
             "gateway_down", "gateway",
@@ -441,7 +482,7 @@ class RecoveryExecutor:
         return {"recovered": result.recovered, "verified": result.verified,
                 "attempts": result.attempts, "recorded": result.recorded}
 
-    def detect_bind(self, expected_bind: str = "auto") -> Dict:
+    def detect_bind(self, expected_bind: str = "loopback") -> Dict:
         """检测 Gateway bind 配置漂移(双失联根因④: bind 被改 tailnet)。
 
         读取 openclaw.json 的 gateway.bind 字段·与期望值比对:
@@ -718,7 +759,7 @@ class OpenClawConnector:
     """监控 OpenClaw runtime: Gateway 进程/WebUI/session。"""
 
     def check_gateway(self) -> RuntimeHealthEvent:
-        pid = _find_pid("gateway --port 18789")
+        pid = _gateway_pid()
         if not pid:
             return _emit(RuntimeHealthEvent(
                 event_type="gateway_down", agent_id="gateway", status="detected",

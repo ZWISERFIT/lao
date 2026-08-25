@@ -142,25 +142,27 @@ class TestR5SwitchAuditor:
         return router
 
     def test_agent_binding_triggers_audit(self):
-        """route() with agent='baron' → 配额耗尽 failover 到 qwen(2026-08-19 更新)。
+        """route() with agent='baron' → 配额耗尽方案A降级flash(PRD v1.1 R2.2)。
 
-        旧假设: baron 绑定 token-plan → 触发 agent_binding audit。
-        新现实(2026-08-19 双失联根因②): token-plan 配额耗尽 → 自动 failover
-        到 qwen/deepseek·不再绑定 token-plan。
+        旧假设(22:38版): baron 绑定 token-plan → 换 provider failover。
+        新规格(2026-08-19 23:20 PRD v1.1·Stella护栏①): token-plan 配额耗尽 →
+        同 provider 降级 flash 档(qwen3.6-flash)·不换 provider·审计
+        quota_degrade_flash(方案C换 provider 才是 quota_failover_provider)。
         """
         router = self._make_router()
         router._switch_auditor = MagicMock()
         selection = router.route("light", agent="baron")
         assert isinstance(selection, RouteSelection)
-        # 配额感知: baron 不再走 token-plan(已耗尽)
-        assert selection.provider != "token-plan"
+        # 方案A: 同 provider flash 降级·无换 provider 痕迹
+        assert selection.provider == "token-plan"
+        assert "flash" in selection.model
         reasons = [
             c.args[0].reason
             for c in router._switch_auditor.record.call_args_list
             if c.args
         ]
-        # 2026-08-19: token-plan 耗尽 → 触发 quota_exhausted audit(非 agent_binding)
-        assert any("quota" in r for r in reasons) or not reasons
+        # token-plan 耗尽 → 审计标记 quota_degrade_flash(方案A)
+        assert "quota_degrade_flash" in reasons, f"实际审计: {reasons}"
 
     def test_audit_failure_does_not_block_route(self):
         """SwitchAuditor.record raises → route() still returns a valid selection."""

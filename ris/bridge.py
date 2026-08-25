@@ -39,6 +39,9 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+# C8: provider 状态证据时效(秒)·超出则视为陈旧不定罪
+_PROVIDER_STALE_S = 900.0
+
 from ris.events import RuntimeHealthEvent
 
 # ── 共享 JSON 落盘位置(共享状态约定) ────────────────────────────────
@@ -107,9 +110,18 @@ class RISToLAOBridge:
                 recoveries[et] += 1
 
             # provider 状态(provider_unavailable / provider_ok)
+            # C8(2026-08-23): 陈旧证据不定罪——超 15 分钟的探活事件不参与
+            # provider_status(否则失联期旧 unavailable 把 down 永久固化 →
+            # LAO 健康门全阻断 503)。ts 无法解析时保守视为新鲜。
             if et in ("provider_unavailable", "provider_ok"):
-                pid = e.get("agent_id", e.get("detail", {}).get("provider", "?"))
-                provider_status[pid] = "healthy" if et == "provider_ok" else "down"
+                try:
+                    _age = datetime.now(timezone.utc).timestamp() \
+                        - datetime.fromisoformat(e.get("ts", "")).timestamp()
+                except Exception:
+                    _age = 0.0
+                if _age <= _PROVIDER_STALE_S:
+                    pid = e.get("agent_id", e.get("detail", {}).get("provider", "?"))
+                    provider_status[pid] = "healthy" if et == "provider_ok" else "down"
 
             # 最新 CPU/Memory
             d = e.get("detail", {})
