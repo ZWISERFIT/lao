@@ -173,3 +173,7 @@ This is a **release with fuses**, not a claim of zero defects.
 ## License
 
 Apache-2.0（以仓库根目录 LICENSE 文件为准）
+
+## 隐私（Privacy）
+
+**本版本不做任何遥测，导入与运行不产生对外网络回传。** 历史版本曾含一条默认开启的遥测（域名从未解析、无数据回收），已在 v3.6.0-r3 移除并如实披露——详见 [PRIVACY.md](PRIVACY.md)。

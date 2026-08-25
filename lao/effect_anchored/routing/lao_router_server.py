@@ -132,6 +132,9 @@ PROVIDER_CONFIG = {
     },
 }
 
+# C23(2026-08-25): token-plan 系模型(阿里云MaaS预付包·创始人令切换) — 放行+配额制计价
+_TOKEN_PLAN_MODELS = frozenset({"qwen3.8-max", "qwen3.7-plus", "qwen3.6-flash", "qwen3.7-max", "glm-5.2"})
+
 # ── 按 Agent 分发独立 key(治本·解决共用Tristan key的B1盲点) ──
 # DeepSeek 官方按 API key 归因用量。共用 1 个 key → 后台分不清哪个 Agent / 缓存失效 miss 暴增。
 # 现在: 从请求 model_hint 前缀(如 deepseek-momo/...)或 x-lao-agent header 识别 Agent, 用其独立 key。
@@ -629,7 +632,7 @@ def _load_official_csv_prices(force: bool = False):
                             if yuan_per_m <= 0:
                                 continue
                             key = _pricing_model_key(model)  # plain名·与fallback/lookup键一致
-                            if date >= "2026-08-17" and (row.get("time") or "").strip() in _CST_PEAK_HOURS:
+                            if date >= "2026-08-17" and (row.get("start_time_iso") or "")[11:13] in _CST_PEAK_HOURS:  # FIX(2026-08-26): "time"列不存在，小时位取自start_time_iso
                                 peak.setdefault(key, {})[cat] = yuan_per_m
                             else:
                                 unified.setdefault(key, {})[cat] = yuan_per_m
@@ -659,6 +662,9 @@ def _compute_cost_yuan(model: str, cache_hit: int, cache_miss: int, out_tok: int
     """
     regime, window = _pricing_now()
     k = _pricing_model_key(model)  # plain名: 官方CSV计费口径
+    # C23(2026-08-25): token-plan 配额制(预付包) — 边际成本按0记账(配额消耗以token量留痕)
+    if (model or "").lower() in _TOKEN_PLAN_MODELS:
+        return (0.0, "token-plan-quota", window, FX_USD_CNY)
     try:
         unified, peak = _load_official_csv_prices()
     except Exception:
@@ -1222,13 +1228,15 @@ def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
         "cost_yuan": round(cost_yuan, 6), "pricing_regime": pricing_regime, "window": pricing_window,
         "latency_ms": latency_ms, "stream": stream,
         "status": status, "error": error or "",
-        "saving_usd": round(saving_ev.saving_amount, 6),
+        # "saving_usd" 已全线停用(2026-08-26 创始人裁定): 口径证伪·非汇率换算值; 对外一律 ¥ 口径
         "fallback_chain": sel.fallback_chain,
         "capability_events": cap_events,   # Phase A/B: 参数过滤事件(TrustEvent 链)
         "session_fp": session_fp,
     })
     # B2 反向桥: 路由/降级/成本/缓存结果 → lao-signal.json(RIS 消费·双向飞轮)
-    _update_lao_signal(provider, ok=(status == "ok"),
+    # FIX(2026-08-26 C23全量接入): W6验证失败(status=retry)转发已成功, 不计provider错误, 防RIS误熔断
+    _sig_ok = (status == "ok") or (status == "retry")
+    _update_lao_signal(provider, ok=_sig_ok,
                        cache_hit=cache_hit, cache_miss=cache_miss,
                        cost_usd=cost_yuan / fx, degraded=degraded)
     # 三层Loop回流(2026-08-16): L1结果→L2经验工厂(错误复利/经验复利)
@@ -1249,8 +1257,14 @@ def list_models():
 
 @app.get("/v1/savings")
 def savings_report():
+    # 口径标注(2026-08-26 创始人裁定): 纯内存估算，仅覆盖最近一次进程重启后的窗口；
+    # original_cost 为硬编码反事实基线，非官方价目；不得作为省钱证据对外引用。
     """M6: LAO Impact Report(供 Nova/Stella/Dashboard 消费)。"""
-    return savings_engine.impact_report()
+    rep = dict(savings_engine.impact_report())
+    rep["disclaimer"] = ("in-memory estimate; covers ONLY the window since the last process restart; "
+                         "original_cost is a hardcoded counterfactual baseline, NOT official pricing; "
+                         "not an audited cost-saving figure / 仅覆盖重启后窗口，内存估算，非官方对账口径")
+    return rep
 
 
 @app.get("/v1/loop/status")
@@ -1472,6 +1486,13 @@ async def chat_completions(request: Request):
             chosen_model = _hit["model"]
             chosen_provider = _hit.get("provider", chosen_provider)
 
+    # C23(2026-08-25): 大上下文守门(成本-效率平衡点) — token-plan 窗口131072/maxOut8192,
+    # 预估输入 context_tokens>100k 的请求自动回 deepseek-v4-flash(1M窗口/384k输出)。
+    # 实测2026-08-24: 0.4%请求(stella/tristan/baron大会话, 最大262k)超131k会跑不通。
+    if chosen_provider == "token-plan" and context_tokens > 100000:
+        chosen_provider = "deepseek"
+        chosen_model = "deepseek-v4-flash"
+
     # B2/B5: RIS 健康门——被 RIS 阻断(down/isolated)的 provider 摘出候选·降级切换;
     # 全部候选被阻断 → 显式 503(禁止静默 fallback·ProviderHealthGate 哲学)
     chosen_provider, _block_ev = _ris_guard_provider(chosen_provider, request_id)
@@ -1485,7 +1506,10 @@ async def chat_completions(request: Request):
     # 官方通道, 覆盖效果锚定/粘性/RIS 降级的 provider 逃逸(novarouteai/qwen), 保证
     # DeepSeek 后台按 key 归因每个 Agent 的真实调用; 模型名同步锁 deepseek 系防错配。
     if agent and AGENT_KEYS.get(agent):
-        if not (chosen_provider == "deepseek" and chosen_model.startswith("deepseek-")):
+        # C23(2026-08-25): token-plan 放行口(创始人令切换) — 归因不受影响:
+        # 身份已在 LAO 入口按 per-agent key 反查完成; 上游用 PROVIDER_CONFIG 的 token-plan key。
+        _c23_tp = (chosen_provider == "token-plan" and chosen_model in _TOKEN_PLAN_MODELS)
+        if not ((chosen_provider == "deepseek" and chosen_model.startswith("deepseek-")) or _c23_tp):
             chosen_provider = "deepseek"
             chosen_model = _hint_model if (_hint_model or "").startswith("deepseek-") else "deepseek-v4-flash"
 
