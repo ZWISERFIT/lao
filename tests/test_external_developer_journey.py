@@ -56,8 +56,10 @@ def test_a_first_install_and_chat():
     assert result["events"] and result["events"][0]["event"] == "CostSavings"
 
 
-@pytest.mark.skipif(not _router_reachable(),
-                    reason="lao-router 未在 127.0.0.1:8765 监听: Agent Online 需要真实上游")
+@pytest.mark.skipif(not (os.environ.get("LAO_LIVE_GATE") == "1" and _router_reachable()),
+                    reason="需 LAO_LIVE_GATE=1 且 lao-router 在 127.0.0.1:8765 监听。"
+                           "第三方上游此刻是否应答属运维状态, 不是本仓库代码的性质, "
+                           "因此默认不跑, 以保证任何人克隆后跑 pytest 结果确定。")
 def test_a_first_install_and_chat_live_router():
     """Test A(live): 有 lao-router + 可用上游时, 4 层能力必须全部 Active。
 

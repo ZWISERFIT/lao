@@ -1,0 +1,5 @@
+{
+  "_doc": "Optional operator signal file. Mark a provider as quota-exhausted so the router stops choosing it until you flip it back. When this file is absent every configured provider is treated as available (fail-open). Copy this to provider-quota.json to use it.",
+  "_values": "available | exhausted",
+  "example-provider": "available"
+}

@@ -90,3 +90,6 @@ tests/test_ris_state_registry.py
 docs/LAO-v3.4-Compatibility-Repair-Report-20260813.md
 docs/LAO-v3.4-Production-Routing-Stabilization-Report-20260813.md
 docs/LAO-v3.4-Provider-Reliability-Hardening-Report-20260813.md
+
+# 运维状态信号文件(每台机器自己维护, 含本地运营信息, 不随开源发布)
+lao/effect_anchored/data/provider-quota.json
