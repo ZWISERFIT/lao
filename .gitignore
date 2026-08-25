@@ -93,3 +93,18 @@ docs/LAO-v3.4-Provider-Reliability-Hardening-Report-20260813.md
 
 # 运维状态信号文件(每台机器自己维护, 含本地运营信息, 不随开源发布)
 lao/effect_anchored/data/provider-quota.json
+
+# 内部过程件不随开源发布(创始人 2026-08-25 裁定 第三节第4项)
+# 评审往来/施工完成报告/日报/交付包/路线图/发布证书/修复报告/决策会纪要/发布工具
+docs/*ChatGPT*
+docs/*施工完成报告*
+docs/*今日总结报告*
+docs/*交付包*
+docs/*Roadmap*
+docs/*Release-Certificate*
+docs/LAO-QODER-FIX*
+docs/RIS-FIX*
+docs/LAO-optimization-decision-council*
+QODER_AUDIT_REPORT.md
+TRISTAN_AUDIT_REPORT.md
+scripts/publish-pypi.sh

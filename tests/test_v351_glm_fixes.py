@@ -8,6 +8,7 @@ Run: python3 -m pytest tests/test_v351_glm_fixes.py -v
 """
 
 import json
+import os
 import time
 from unittest.mock import patch, MagicMock
 
@@ -149,20 +150,27 @@ class TestR5SwitchAuditor:
         同 provider 降级 flash 档(qwen3.6-flash)·不换 provider·审计
         quota_degrade_flash(方案C换 provider 才是 quota_failover_provider)。
         """
-        router = self._make_router()
-        router._switch_auditor = MagicMock()
-        selection = router.route("light", agent="baron")
-        assert isinstance(selection, RouteSelection)
-        # 方案A: 同 provider flash 降级·无换 provider 痕迹
-        assert selection.provider == "token-plan"
-        assert "flash" in selection.model
-        reasons = [
-            c.args[0].reason
-            for c in router._switch_auditor.record.call_args_list
-            if c.args
-        ]
-        # token-plan 耗尽 → 审计标记 quota_degrade_flash(方案A)
-        assert "quota_degrade_flash" in reasons, f"实际审计: {reasons}"
+        # 前置条件由用例自己声明。它原先默默依赖本机 lao/effect_anchored/data/
+        # provider-quota.json 把 token-plan 标为 exhausted —— 那是运维状态文件，
+        # 按创始人 2026-08-25 裁定第三节第4项已 untrack，不随开源发布。于是干净克隆里
+        # 该前提消失：_check_provider_quota 落到信号3(探测被 mock 成 True)判为可用，
+        # 不再降级，审计原因退化成 agent_binding，用例必红。这里改用同一函数已支持的
+        # 信号2(环境变量，见 model_router.py:274)，让前提随用例走、任何机器上一致。
+        with patch.dict(os.environ, {"PROVIDER_QUOTA_TOKEN_PLAN": "exhausted"}):
+            router = self._make_router()
+            router._switch_auditor = MagicMock()
+            selection = router.route("light", agent="baron")
+            assert isinstance(selection, RouteSelection)
+            # 方案A: 同 provider flash 降级·无换 provider 痕迹
+            assert selection.provider == "token-plan"
+            assert "flash" in selection.model
+            reasons = [
+                c.args[0].reason
+                for c in router._switch_auditor.record.call_args_list
+                if c.args
+            ]
+            # token-plan 耗尽 → 审计标记 quota_degrade_flash(方案A)
+            assert "quota_degrade_flash" in reasons, f"实际审计: {reasons}"
 
     def test_audit_failure_does_not_block_route(self):
         """SwitchAuditor.record raises → route() still returns a valid selection."""
