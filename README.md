@@ -1,4 +1,8 @@
-# LAO — Logically Anchored Ontology
+# LAO — Long-term Anchored Ontology
+
+**Official site · 官网门店：** [zwiserfit.cn](https://zwiserfit.cn)
+LAO sits between your LLM and Runtime and stops burning your tokens. Free, open source (Apache 2.0), no telemetry.
+LAO坐在你的LLM与Runtime之间，帮你省token。免费、开源（Apache 2.0）、无遥测。
 
 **让 Agent 不再忘事、不再胡说，像人一样记住真实经验并自动复利。**
 
