@@ -1489,7 +1489,12 @@ async def chat_completions(request: Request):
     # C23(2026-08-25): 大上下文守门(成本-效率平衡点) — token-plan 窗口131072/maxOut8192,
     # 预估输入 context_tokens>100k 的请求自动回 deepseek-v4-flash(1M窗口/384k输出)。
     # 实测2026-08-24: 0.4%请求(stella/tristan/baron大会话, 最大262k)超131k会跑不通。
-    if chosen_provider == "token-plan" and context_tokens > 100000:
+    # PEAK-GATE(2026-08-26·创始人令补充): 峰时(工作日09-12/14-18 CST·deepseek翻倍价)
+    # >100k 请求留在 token-plan: 100-131k 本可直跑; >131k 上游拒绝后由网关
+    # context-overflow-recovery 自动截断重试(14:46实测该机制有效)。谷时维持原守门回 deepseek。
+    _pk_regime, _pk_window = _pricing_now()
+    _at_peak = (_pk_regime == "peak_valley" and _pk_window == "peak")
+    if chosen_provider == "token-plan" and context_tokens > 100000 and not _at_peak:
         chosen_provider = "deepseek"
         chosen_model = "deepseek-v4-flash"
 
@@ -1512,6 +1517,35 @@ async def chat_completions(request: Request):
         if not ((chosen_provider == "deepseek" and chosen_model.startswith("deepseek-")) or _c23_tp):
             chosen_provider = "deepseek"
             chosen_model = _hint_model if (_hint_model or "").startswith("deepseek-") else "deepseek-v4-flash"
+
+    # PEAK-FIX v2(2026-08-26·创始人指令+追加令): DeepSeek高峰时段(工作日09-12/
+    # 14-18 CST·翻倍价)禁止任何请求落deepseek——含网关fallback与中继兜底。
+    # 优先级: novarouteai中继 > token-plan主模型(超大上下文由上游400→网关
+    # context-overflow-recovery截断重试兜住) > 绝不回deepseek。
+    _pk_regime, _pk_window = _pricing_now()
+    if _pk_regime == "peak_valley" and _pk_window == "peak" and chosen_provider == "deepseek":
+        _nr_ok = bool(PROVIDER_CONFIG.get("novarouteai", {}).get("api_key"))
+        if _nr_ok:
+            try:
+                _nr_snap = ris_gate.read()
+                if _nr_snap["fresh"] and "novarouteai" in _nr_snap["blocked"]:
+                    _nr_ok = False  # RIS 隔离中 → 不送死
+            except Exception:
+                pass
+        if _nr_ok:
+            chosen_provider = "novarouteai"
+        else:
+            # 追加令: 峰时兜底也不许deepseek → 改投token-plan主模型并留痕
+            try:
+                with open("/home/agentuser/.openclaw/workspace/tristan/tech_lead/logs/lao-ris-alerts.jsonl", "a", encoding="utf-8") as _af:
+                    _af.write(json.dumps({"ts": _dt.now(_CST).strftime("%Y-%m-%dT%H:%M:%S%z"),
+                                          "type": "peak_deepseek_diverted_tokenplan",
+                                          "agent": agent or "unknown",
+                                          "detail": "peak window; novarouteai unavailable; diverted to token-plan instead of deepseek"}) + "\n")
+            except Exception:
+                pass
+            chosen_provider = "token-plan"
+            chosen_model = "qwen3.8-max"
 
     # ③ 转发真实 provider(按 chosen_provider 动态选 base_url + key·白名单过滤+能力协商)
     client = _provider_client(chosen_provider, agent)
