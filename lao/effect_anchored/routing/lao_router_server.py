@@ -514,7 +514,8 @@ def _ris_guard_provider(chosen_provider: str, request_id: str = "") -> tuple:
     if chosen_provider not in snap["blocked"]:
         return chosen_provider, None
     # 降级: 摘除被阻断 provider·按序选健康候选(有 key 才可用)
-    for cand in ("deepseek", "token-plan", "novarouteai"):
+    # fallback纪律(2026-08-29·创始人令): 兜底候选禁用deepseek与qwen
+    for cand in ("token-plan", "novarouteai"):
         if cand == chosen_provider:
             continue
         cfg = PROVIDER_CONFIG.get(cand)
