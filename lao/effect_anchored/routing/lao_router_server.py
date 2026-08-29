@@ -985,6 +985,19 @@ def _r3_task_key(agent: str, session_fp: str) -> str:
     return f"{agent or 'unknown'}|{session_fp or 'nofp'}"
 
 
+def _r3_retry_seq(key: str) -> int:
+    """L-A4: 只读取当前任务的重试序号(供主路由事件落 retry_seq 字段)。
+
+    值由入口 _r3_retry_check() 写入 _r3_state; 本函数不修改任何状态,
+    仅加锁读取, 取不到一律返回 0(不抛异常, 不阻塞结算)。
+    """
+    try:
+        with _r3_lock:
+            return int(_r3_state.get("tasks", {}).get(key, {}).get("retry_count", 0))
+    except Exception:
+        return 0
+
+
 def _r3_add_tokens(agent: str, session_fp: str, tokens: int):
     """结算时累计任务 token · 越限即打告警/熔断标记(下一次请求入口拦截)。"""
     if tokens <= 0:
@@ -1216,6 +1229,17 @@ def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
         quality_score=_model_quality(chosen_model, sel.tier),
         switch_reason="budget_redline_degrade" if degraded else "tier_match",
     )
+    # L-A4 修复(2026-08-29 创始人批复): 主路由事件补齐 task_key / retry_seq。
+    # 旧版这两键只写在 r3 告警/熔断事件里, 主结算事件 schema 里没有它们,
+    # 统计按键取值恒为 None(42/43 号件实测 168/168 全空), 导致 RIS 判定口径
+    # "高频重复请求""同一请求重复触发熔断后仍在重试"无字段可判。
+    _task_key = ""
+    _retry_seq = 0
+    try:
+        _task_key = _r3_task_key(agent, session_fp)
+        _retry_seq = _r3_retry_seq(_task_key)
+    except Exception:
+        pass  # fail-open: 取证字段取不到不得阻塞结算与计费
     _log_event({
         "request_id": request_id,
         "tier": tier, "chosen_model": chosen_model, "forwarded_model": chosen_model,
@@ -1232,6 +1256,9 @@ def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
         "fallback_chain": sel.fallback_chain,
         "capability_events": cap_events,   # Phase A/B: 参数过滤事件(TrustEvent 链)
         "session_fp": session_fp,
+        # L-A4(2026-08-29): 取证字段 — 任务标识与重试序号
+        "task_key": _task_key,
+        "retry_seq": _retry_seq,
     })
     # B2 反向桥: 路由/降级/成本/缓存结果 → lao-signal.json(RIS 消费·双向飞轮)
     # FIX(2026-08-26 C23全量接入): W6验证失败(status=retry)转发已成功, 不计provider错误, 防RIS误熔断
