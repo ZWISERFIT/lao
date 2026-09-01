@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lao-human-calibration"
-version = "0.2.0-beta"
+version = "0.2.0"
 description = "LAO — Logically Anchored Ontology. 让 Agent 不再忘事、不再胡说，像人一样记住真实经验并自动复利。BMC行为预测 + 五引擎 Agent 可靠性层。"
 readme = "README.md"
 requires-python = ">=3.9"

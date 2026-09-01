@@ -1,0 +1,185 @@
+{
+  "口径": "S5-1 虚报判定: 声明窗口 > 官方实际窗口 → 虚报条目",
+  "取数责任": "实测窗口值须由 Nova 持自有令牌从 token-plan 官方后台取得(O-3); 本骨架不得填入任何未经官方对账的数字(N-01)",
+  "声明源": {
+    "文件": "/home/agentuser/.openclaw/openclaw.json",
+    "SHA-256": "b375842158ef0f5a0c6e5c90437c267747e84e364caeeb07c5b36de61da3f772",
+    "快照": "/home/agentuser/lao-release/lao/effect_anchored/cost_defense/evidence/snapshots/openclaw.json.snapshot-pre-s5-20260831",
+    "快照SHA-256": "44c27e2cfa955f49cf05d74861ee0305132ee3c0e1739c56f9c56bb5c9def490"
+  },
+  "重复声明": {},
+  "agent声明": [
+    {
+      "路径": "$.agents.defaults.model.primary",
+      "provider": "deepseek-shuyu",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.defaults.model.fallbacks[0]",
+      "provider": "deepseek-shuyu",
+      "model": "deepseek-v4-flash"
+    },
+    {
+      "路径": "$.agents.defaults.compaction.memoryFlush.model",
+      "provider": "deepseek-tristan",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.list[0].model.primary",
+      "provider": "deepseek-shuyu",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.list[0].model.fallbacks[0]",
+      "provider": "deepseek-shuyu",
+      "model": "deepseek-v4-flash"
+    },
+    {
+      "路径": "$.agents.list[1].model.primary",
+      "provider": "deepseek-baron",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.list[1].model.fallbacks[0]",
+      "provider": "deepseek-baron",
+      "model": "deepseek-v4-flash"
+    },
+    {
+      "路径": "$.agents.list[2].model.primary",
+      "provider": "deepseek-ethan",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.list[2].model.fallbacks[0]",
+      "provider": "deepseek-ethan",
+      "model": "deepseek-v4-flash"
+    },
+    {
+      "路径": "$.agents.list[3].model.primary",
+      "provider": "deepseek-tristan",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.list[3].model.fallbacks[0]",
+      "provider": "deepseek-tristan",
+      "model": "deepseek-v4-flash"
+    },
+    {
+      "路径": "$.agents.list[4].model.primary",
+      "provider": "deepseek-stella",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.list[4].model.fallbacks[0]",
+      "provider": "deepseek-stella",
+      "model": "deepseek-v4-flash"
+    },
+    {
+      "路径": "$.agents.list[5].model.primary",
+      "provider": "deepseek-nova",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.list[5].model.fallbacks[0]",
+      "provider": "deepseek-nova",
+      "model": "deepseek-v4-flash"
+    },
+    {
+      "路径": "$.agents.list[6].model.primary",
+      "provider": "deepseek-luna",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.list[6].model.fallbacks[0]",
+      "provider": "deepseek-luna",
+      "model": "deepseek-v4-flash"
+    },
+    {
+      "路径": "$.agents.list[7].model.primary",
+      "provider": "deepseek-zeus",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.list[7].model.fallbacks[0]",
+      "provider": "deepseek-zeus",
+      "model": "deepseek-v4-flash"
+    },
+    {
+      "路径": "$.agents.list[8].model.primary",
+      "provider": "deepseek-momo",
+      "model": "qwen3.8-max"
+    },
+    {
+      "路径": "$.agents.list[8].model.fallbacks[0]",
+      "provider": "deepseek-momo",
+      "model": "deepseek-v4-flash"
+    }
+  ],
+  "对账行": [
+    {
+      "provider": "token-plan",
+      "model": "glm-5.2",
+      "声明contextWindow": 131072,
+      "声明maxTokens": 8192,
+      "声明name": "GLM-5.2 (TokenPlan)",
+      "实测contextWindow": null,
+      "实测maxTokens": null,
+      "差异": null,
+      "判定": null,
+      "进入LAO动态池": true,
+      "switch_audit实测笔数": 0
+    },
+    {
+      "provider": "token-plan",
+      "model": "qwen3.6-flash",
+      "声明contextWindow": 131072,
+      "声明maxTokens": 8192,
+      "声明name": "Qwen3.6 Flash (TokenPlan)",
+      "实测contextWindow": null,
+      "实测maxTokens": null,
+      "差异": null,
+      "判定": null,
+      "进入LAO动态池": true,
+      "switch_audit实测笔数": 29745
+    },
+    {
+      "provider": "token-plan",
+      "model": "qwen3.7-max",
+      "声明contextWindow": 32768,
+      "声明maxTokens": 8192,
+      "声明name": "Qwen3.7 Max (TokenPlan)",
+      "实测contextWindow": null,
+      "实测maxTokens": null,
+      "差异": null,
+      "判定": null,
+      "进入LAO动态池": false,
+      "switch_audit实测笔数": 0
+    },
+    {
+      "provider": "token-plan",
+      "model": "qwen3.7-plus",
+      "声明contextWindow": 131072,
+      "声明maxTokens": 8192,
+      "声明name": "Qwen3.7 Plus (TokenPlan)",
+      "实测contextWindow": null,
+      "实测maxTokens": null,
+      "差异": null,
+      "判定": null,
+      "进入LAO动态池": true,
+      "switch_audit实测笔数": 16658
+    },
+    {
+      "provider": "token-plan",
+      "model": "qwen3.8-max",
+      "声明contextWindow": 131072,
+      "声明maxTokens": 8192,
+      "声明name": "Qwen3.8 Max (TokenPlan)",
+      "实测contextWindow": null,
+      "实测maxTokens": null,
+      "差异": null,
+      "判定": null,
+      "进入LAO动态池": false,
+      "switch_audit实测笔数": 0
+    }
+  ]
+}

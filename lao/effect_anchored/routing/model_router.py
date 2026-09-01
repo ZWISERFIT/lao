@@ -54,7 +54,7 @@ class RouteSelection:
 
 # 创始人 B 阶段(2026-08-14): Agent → Provider 绑定分组
 # baron/ethan/momo → token-plan(百炼·qwen/glm 有补贴)
-# 其余 Agent 默认 deepseek(不在表 = deepseek)
+# 其余 Agent 默认 token-plan(不在表 = token-plan；2026-08-30 止血：创始人令 deepseek 停用)
 AGENT_PROVIDER_BINDING = {
     "baron": "token-plan",
     "ethan": "token-plan",
@@ -164,7 +164,7 @@ class ModelRouter:
         每个 tier 用真实配置的 provider/模型构建降级链：
             - qwen provider 模型(qwen3.7-flash/qwen-plus/qwen-max) 优先
             - deepseek 直连(deepseek-v4-flash)
-            - token-plan(qwen3.6-flash/qwen3.7-plus/qwen3.8-max/glm-5.2)
+            - token-plan(qwen3.6-flash/qwen3.7-plus/glm-5.2)
             - novarouteai(glm-5.2/qwen3.7-plus)
 
         未知模型 id（config 中不存在）→ 不放入池（fail-fast: 后续路由遇
@@ -215,7 +215,7 @@ class ModelRouter:
                                        "$0.14/$0.28"))
                 # 3) token-plan(qwen3.6-flash 等)
                 tp_ids = provider_models.get("token-plan", set())
-                for mid in ("qwen3.6-flash", "qwen3.7-plus", "qwen3.8-max", "glm-5.2"):
+                for mid in ("qwen3.6-flash", "qwen3.7-plus", "glm-5.2"):
                     if mid in tp_ids:
                         chain.append(entry(mid, "token-plan", 0.76, 0.55,
                                            "$0.08/$0.20"))
@@ -716,12 +716,12 @@ class ModelRouter:
                     _quota_dead.append(_prov)
             if _quota_dead:
                 _dead = set(_quota_dead)
-                # 方案A: 同 provider flash 档降级(如 qwen3.8-max→qwen3.6-flash)
+                # 方案A: 同 provider flash 档降级(实测: qwen3.7-plus→qwen3.6-flash)
                 _flash = [e for e in pool if e.get("provider") in _dead
                           and "flash" in str(e.get("model", "")).lower()]
                 _alive = [e for e in pool if e.get("provider") not in _dead]
                 if _flash:
-                    # 审计 from = 被降级 provider 首个非 flash 档(PRD例: qwen3.8-max)
+                    # 审计 from = 被降级 provider 首个非 flash 档(实测: qwen3.7-plus, 16,588笔)
                     _from = next(
                         (e for e in pool if e.get("provider") in _dead
                          and "flash" not in str(e.get("model", "")).lower()),
@@ -792,7 +792,7 @@ class ModelRouter:
         # baron/ethan/momo → token-plan 池(只选 token-plan 的 model)
         # 其他 agent → 只选 deepseek 池
         if agent:
-            bind_provider = AGENT_PROVIDER_BINDING.get(agent, "deepseek")
+            bind_provider = AGENT_PROVIDER_BINDING.get(agent, "token-plan")  # 2026-08-30止血:创始人令deepseek停用,默认改token-plan
             _ab_from = pool[0] if pool else {}
             bound = [e for e in pool if e.get("provider") == bind_provider]
             if bound:  # 绑定 provider 有可用 model → 只用它

@@ -1,0 +1,98 @@
+{
+  "件名": "S5-2 窗口对账 · Nova 官方实数数据件",
+  "日期": "2026-08-31",
+  "依据": "裁定⑥：骨架件按现值 92d08359… 冻结入账，Nova 实数另写数据件",
+  "定位": "本件是 Nova 填写官方实数的唯一落笔处。冻结骨架 s5_window_reconcile_skeleton.json 不得回填、不得改动。",
+  "冻结骨架": {
+    "文件": "lao/effect_anchored/cost_defense/evidence/s5_window_reconcile_skeleton.json",
+    "SHA-256": "92d08359d6bfeb4302d21f1687360f7a1a914e82421ad9d08a704092d5b90847",
+    "说明": "本件的声明侧五行取自该冻结骨架原文，逐字段一致，未作任何改写"
+  },
+  "口径": "S5-1 虚报判定：声明窗口 > 官方实际窗口 → 虚报条目",
+  "取数责任": "实测窗口值须由 Nova 持自有令牌从 token-plan 官方后台取得（O-3）",
+  "填写纪律": [
+    "N-01 铁律：凡未经官方后台对账的数字，一律不得填入实测侧，也不得据以下任何判定",
+    "运行时观测值（如 OpenClaw 启动加载日志所载 observed=4096）属另一类证据，不可充当官方实数，不得填入本件实测侧",
+    "实测侧填入后，差异 = 声明contextWindow − 实测contextWindow；判定取 属实 | 虚报 二值之一",
+    "五行全部填毕且判定非 null 时，缺口 A 方可关闭；未填满前不得对外产出任何虚报结论"
+  ],
+  "当前完成度": "0/5（实测侧全部为 null，与呈批时一致，本轮未代填任何数字）",
+  "字段说明": {
+    "声明contextWindow": "openclaw.json 内 token-plan 该 model 的声明值（只读取得）",
+    "实测contextWindow": "token-plan 官方后台实数，待 Nova 填",
+    "差异": "声明值 − 实测值，待 Nova 填",
+    "判定": "属实 | 虚报，待 Nova 填",
+    "switch_audit实测笔数": "取数时刻的账本切片笔数；活账本持续追写，此值仅供参考，不参与虚报判定"
+  },
+  "对账行": [
+    {
+      "provider": "token-plan",
+      "model": "glm-5.2",
+      "声明contextWindow": 131072,
+      "声明maxTokens": 8192,
+      "声明name": "GLM-5.2 (TokenPlan)",
+      "实测contextWindow": null,
+      "实测maxTokens": null,
+      "差异": null,
+      "判定": null,
+      "进入LAO动态池": true,
+      "switch_audit实测笔数": 0
+    },
+    {
+      "provider": "token-plan",
+      "model": "qwen3.6-flash",
+      "声明contextWindow": 131072,
+      "声明maxTokens": 8192,
+      "声明name": "Qwen3.6 Flash (TokenPlan)",
+      "实测contextWindow": null,
+      "实测maxTokens": null,
+      "差异": null,
+      "判定": null,
+      "进入LAO动态池": true,
+      "switch_audit实测笔数": 29745
+    },
+    {
+      "provider": "token-plan",
+      "model": "qwen3.7-max",
+      "声明contextWindow": 32768,
+      "声明maxTokens": 8192,
+      "声明name": "Qwen3.7 Max (TokenPlan)",
+      "实测contextWindow": null,
+      "实测maxTokens": null,
+      "差异": null,
+      "判定": null,
+      "进入LAO动态池": false,
+      "switch_audit实测笔数": 0
+    },
+    {
+      "provider": "token-plan",
+      "model": "qwen3.7-plus",
+      "声明contextWindow": 131072,
+      "声明maxTokens": 8192,
+      "声明name": "Qwen3.7 Plus (TokenPlan)",
+      "实测contextWindow": null,
+      "实测maxTokens": null,
+      "差异": null,
+      "判定": null,
+      "进入LAO动态池": true,
+      "switch_audit实测笔数": 16658
+    },
+    {
+      "provider": "token-plan",
+      "model": "qwen3.8-max",
+      "声明contextWindow": 131072,
+      "声明maxTokens": 8192,
+      "声明name": "Qwen3.8 Max (TokenPlan)",
+      "实测contextWindow": null,
+      "实测maxTokens": null,
+      "差异": null,
+      "判定": null,
+      "进入LAO动态池": false,
+      "switch_audit实测笔数": 0
+    }
+  ],
+  "备注": [
+    "R-04 回归样本载 14 条超窗案，stated 131072 / observed 4096 齐备，但该 observed 系运行时观测，非官方实数，故 R-04 维持未完成（裁定⑤）",
+    "qwen3.8-max 一行的声明值取自 token-plan.models[1]；A 类去重已删除的重复元素 models[5]（原 name 为 DeepSeek V4 Pro (TokenPlan)，同为 131072/8192）不另立行"
+  ]
+}

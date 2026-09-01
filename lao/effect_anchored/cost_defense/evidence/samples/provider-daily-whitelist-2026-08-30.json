@@ -1,0 +1,9 @@
+{
+  "date": "2026-08-30",
+  "signed_by": "统筹席(复盘重建样本·非当日原件)",
+  "allowed_providers": ["token-plan"],
+  "denied_providers": ["deepseek"],
+  "effective_from": "2026-08-30T00:00:00+00:00",
+  "expires_at": "2026-08-31T00:00:00+00:00",
+  "notes": "2026-08-30 当日 share/state 下无白名单落盘原件(实测缺失)。本文件按事故复盘口径重建, 仅用于 S2 回归复演, 不得作为当日授权凭据, 不得置入 share/state。"
+}

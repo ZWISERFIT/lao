@@ -1,0 +1,1323 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": "/home/agentuser/.openclaw/workspace",
+      "model": {
+        "primary": "deepseek-shuyu/qwen3.8-max",
+        "fallbacks": [
+          "deepseek-shuyu/deepseek-v4-flash"
+        ]
+      },
+      "heartbeat": {
+        "every": "0"
+      },
+      "subagents": {
+        "allowAgents": []
+      },
+      "compaction": {
+        "mode": "safeguard",
+        "maxHistoryShare": 0.75,
+        "keepRecentTokens": 250000,
+        "recentTurnsPreserve": 10,
+        "reserveTokens": 15000,
+        "reserveTokensFloor": 25000,
+        "truncateAfterCompaction": true,
+        "memoryFlush": {
+          "enabled": true,
+          "model": "deepseek-tristan/qwen3.8-max"
+        },
+        "maxActiveTranscriptBytes": "2000000",
+        "notifyUser": true
+      }
+    },
+    "list": [
+      {
+        "id": "shuyu",
+        "name": "Shuyu",
+        "model": {
+          "primary": "deepseek-shuyu/qwen3.8-max",
+          "fallbacks": [
+            "deepseek-shuyu/deepseek-v4-flash"
+          ]
+        },
+        "heartbeat": {
+          "every": "30m",
+          "activeHours": {
+            "start": "00:00",
+            "end": "23:59"
+          }
+        }
+      },
+      {
+        "id": "baron",
+        "name": "Baron",
+        "model": {
+          "primary": "deepseek-baron/qwen3.8-max",
+          "fallbacks": [
+            "deepseek-baron/deepseek-v4-flash"
+          ]
+        },
+        "heartbeat": {
+          "every": "30m",
+          "activeHours": {
+            "start": "00:00",
+            "end": "23:59"
+          }
+        }
+      },
+      {
+        "id": "ethan",
+        "name": "Ethan",
+        "model": {
+          "primary": "deepseek-ethan/qwen3.8-max",
+          "fallbacks": [
+            "deepseek-ethan/deepseek-v4-flash"
+          ]
+        },
+        "heartbeat": {
+          "every": "4h",
+          "activeHours": {
+            "start": "00:00",
+            "end": "23:59"
+          }
+        }
+      },
+      {
+        "id": "tristan",
+        "name": "Tristan",
+        "model": {
+          "primary": "deepseek-tristan/qwen3.8-max",
+          "fallbacks": [
+            "deepseek-tristan/deepseek-v4-flash"
+          ]
+        },
+        "heartbeat": {
+          "every": "1h",
+          "activeHours": {
+            "start": "00:00",
+            "end": "23:59"
+          }
+        }
+      },
+      {
+        "id": "stella",
+        "name": "Stella",
+        "model": {
+          "primary": "deepseek-stella/qwen3.8-max",
+          "fallbacks": [
+            "deepseek-stella/deepseek-v4-flash"
+          ]
+        },
+        "heartbeat": {
+          "every": "1h",
+          "activeHours": {
+            "start": "00:00",
+            "end": "23:59"
+          }
+        }
+      },
+      {
+        "id": "nova",
+        "name": "Nova",
+        "model": {
+          "primary": "deepseek-nova/qwen3.8-max",
+          "fallbacks": [
+            "deepseek-nova/deepseek-v4-flash"
+          ]
+        },
+        "heartbeat": {
+          "every": "4h",
+          "activeHours": {
+            "start": "00:00",
+            "end": "23:59"
+          }
+        }
+      },
+      {
+        "id": "luna",
+        "name": "Luna",
+        "model": {
+          "primary": "deepseek-luna/qwen3.8-max",
+          "fallbacks": [
+            "deepseek-luna/deepseek-v4-flash"
+          ]
+        },
+        "heartbeat": {
+          "every": "1h",
+          "activeHours": {
+            "start": "00:00",
+            "end": "23:59"
+          }
+        }
+      },
+      {
+        "id": "zeus",
+        "name": "Zeus",
+        "model": {
+          "primary": "deepseek-zeus/qwen3.8-max",
+          "fallbacks": [
+            "deepseek-zeus/deepseek-v4-flash"
+          ]
+        },
+        "heartbeat": {
+          "every": "2h",
+          "activeHours": {
+            "start": "00:00",
+            "end": "23:59"
+          }
+        }
+      },
+      {
+        "id": "momo_bridge",
+        "name": "Momo桥接",
+        "workspace": "/home/agentuser/.openclaw/workspace/momo_bridge",
+        "model": {
+          "primary": "deepseek-momo/qwen3.8-max",
+          "fallbacks": [
+            "deepseek-momo/deepseek-v4-flash"
+          ]
+        },
+        "heartbeat": {
+          "every": "4h",
+          "activeHours": {
+            "start": "00:00",
+            "end": "23:59"
+          }
+        }
+      }
+    ]
+  },
+  "gateway": {
+    "mode": "local",
+    "channelHealthCheckMinutes": 0,
+    "auth": {
+      "mode": "password",
+      "password": "888",
+      "token": "openclaw-token-20260821",
+      "allowTailscale": true
+    },
+    "bind": "loopback",
+    "controlUi": {
+      "allowedOrigins": [
+        "https://vm-0-11-ubuntu.tail80182d.ts.net",
+        "https://vm-0-11-ubuntu.tail80182d.ts.net:8444",
+        "http://vm-0-11-ubuntu.tail80182d.ts.net:8446",
+        "http://100.99.243.119:8446",
+        "https://100.99.243.119:8444",
+        "http://localhost:8446",
+        "http://100.99.243.119:18789",
+        "http://vm-0-11-ubuntu.tail80182d.ts.net:18789",
+        "https://vm-0-11-ubuntu.tail80182d.ts.net:8445"
+      ],
+      "allowInsecureAuth": true
+    },
+    "tailscale": {
+      "mode": "off"
+    },
+    "trustedProxies": [
+      "127.0.0.1",
+      "::1",
+      "100.64.0.0/10"
+    ]
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.5.28",
+    "lastTouchedAt": "2026-08-22T05:29:45.598Z"
+  },
+  "session": {
+    "dmScope": "per-channel-peer",
+    "reset": {
+      "mode": "idle",
+      "idleMinutes": 20160
+    },
+    "resetByType": {
+      "direct": {
+        "mode": "idle",
+        "idleMinutes": 43200
+      }
+    },
+    "maintenance": {
+      "mode": "warn",
+      "pruneAfter": "7d",
+      "resetArchiveRetention": "7d",
+      "maxDiskBytes": "2gb"
+    },
+    "sendPolicy": {
+      "rules": [],
+      "default": "allow"
+    }
+  },
+  "channels": {
+    "wecom": {
+      "enabled": true,
+      "routeRules": [
+        {
+          "pattern": "(?:^|[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)])@Momo(?:[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)]|$)|^/店长",
+          "agent": "momo_bridge",
+          "note": "Momo桥接Agent独立会话，OpenClaw↔Hermes跨框架转发"
+        },
+        {
+          "pattern": "(?:^|[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)])@Baron(?:[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)]|$)|^/内容",
+          "agent": "baron"
+        },
+        {
+          "pattern": "(?:^|[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)])@Ethan(?:[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)]|$)|^/专业",
+          "agent": "ethan"
+        },
+        {
+          "pattern": "(?:^|[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)])@Tristan(?:[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)]|$)|^/技术",
+          "agent": "tristan"
+        },
+        {
+          "pattern": "(?:^|[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)])@Stella(?:[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)]|$)|^/审计",
+          "agent": "stella"
+        },
+        {
+          "pattern": "(?:^|[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)])@Shuyu(?:[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)]|$)|^/战略",
+          "agent": "shuyu"
+        },
+        {
+          "pattern": "(?:^|[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)])@Nova(?:[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)]|$)|^/资产",
+          "agent": "nova"
+        },
+        {
+          "pattern": "(?:^|[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)])@Luna(?:[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)]|$)|^/社区",
+          "agent": "luna"
+        },
+        {
+          "pattern": "(?:^|[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)])@Zeus(?:[\\s\\u200b\\u200c\\u200d\\uFEFF，。！？；：、\"'\\(\\)]|$)|^/资本",
+          "agent": "zeus"
+        },
+        {
+          "default": "Shuyu"
+        }
+      ],
+      "accounts": {
+        "main": {
+          "mode": "bot",
+          "botId": "aib8KY_nCz0rzkdvRtJ7rwDGjmo9CyQWKvm",
+          "secret": "2T5fryQeglWaE6DhvbXDnZlWghyNrql8E3ZBHEPsS1o",
+          "dmPolicy": "open",
+          "groupPolicy": "open",
+          "allowFrom": [
+            "MoShuyu",
+            "*"
+          ],
+          "groupAllowFrom": [
+            "*"
+          ]
+        },
+        "baron": {
+          "mode": "bot",
+          "botId": "aib5xP6UNhwHqAJ5iobs7DYRqAZcNhcnR7x",
+          "secret": "jf30HGkIBpmSItWvo2TO8rZhE1LTQAOY1KIKyLnLL1E",
+          "dmPolicy": "open",
+          "groupPolicy": "open",
+          "allowFrom": [
+            "*"
+          ],
+          "groupAllowFrom": [
+            "*"
+          ]
+        },
+        "ethan": {
+          "mode": "bot",
+          "botId": "aib4R_lEAQqKTIQMlmuBLHoXTIuKgQcghL3",
+          "secret": "lFg7kjPoRoYAaUAig9nyIEDgGwNdM2TRc7kyGfxJ6xW",
+          "dmPolicy": "open",
+          "groupPolicy": "open",
+          "allowFrom": [
+            "*"
+          ],
+          "groupAllowFrom": [
+            "*"
+          ]
+        },
+        "tristan": {
+          "mode": "bot",
+          "botId": "aibkl0y48G75XwKi-3jcVT1knziu8HvVVCE",
+          "secret": "1oHyXXdoijxoairmi2NGA30TqNrCm5QtFdK55GbVBxC",
+          "dmPolicy": "open",
+          "groupPolicy": "open",
+          "allowFrom": [
+            "*"
+          ],
+          "groupAllowFrom": [
+            "*"
+          ]
+        },
+        "stella": {
+          "mode": "bot",
+          "botId": "aibRP3BWvcALield77F3hpdCycpAPdWpvBS",
+          "secret": "DRPyKkde8irx5dYdh6Poo5aUT1bnIGy7VtFMzv6iDAf",
+          "dmPolicy": "open",
+          "groupPolicy": "open",
+          "allowFrom": [
+            "*"
+          ],
+          "groupAllowFrom": [
+            "*"
+          ]
+        },
+        "nova": {
+          "mode": "bot",
+          "botId": "aibBbp8Uj3bpna0izj2d1Dgxnah2z1eG7cT",
+          "secret": "WrUDMW9Hs9mblmh7fuJWFN9iIy2lhjOaNGfGF6Fi1d2",
+          "dmPolicy": "open",
+          "allowFrom": [
+            "*"
+          ],
+          "groupPolicy": "open",
+          "groupAllowFrom": [
+            "*"
+          ]
+        },
+        "luna": {
+          "mode": "bot",
+          "botId": "aibRv8espGCnQwQHVhgzWk3OQyagpG-efJQ",
+          "secret": "SCrUAHEtCgWAMV5TElay53pv9AqnBSbkXrpncnjlb5A",
+          "dmPolicy": "open",
+          "allowFrom": [
+            "*"
+          ],
+          "groupPolicy": "open",
+          "groupAllowFrom": [
+            "*"
+          ]
+        },
+        "zeus": {
+          "mode": "bot",
+          "botId": "aibbIqMr6JwsbvDOfXPou4P2Lu2cKKj64d6",
+          "secret": "LXzFSI9Ai0x1QECexsgZM7xpiNGBu7WbTShXhQUEmL6",
+          "dmPolicy": "open",
+          "allowFrom": [
+            "*"
+          ],
+          "groupPolicy": "open",
+          "groupAllowFrom": [
+            "*"
+          ]
+        }
+      },
+      "defaultAccount": "main",
+      "bindings": [
+        {
+          "account": "baron",
+          "agent": "baron"
+        },
+        {
+          "account": "ethan",
+          "agent": "ethan"
+        },
+        {
+          "account": "tristan",
+          "agent": "tristan"
+        },
+        {
+          "account": "stella",
+          "agent": "stella"
+        },
+        {
+          "account": "main",
+          "agent": "shuyu"
+        },
+        {
+          "account": "nova",
+          "agent": "nova"
+        },
+        {
+          "account": "luna",
+          "agent": "luna"
+        },
+        {
+          "account": "zeus",
+          "agent": "zeus"
+        }
+      ]
+    },
+    "feishu": {
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "enabled": true,
+      "appId": "cli_a96da9747fb91bd2",
+      "appSecret": "wwsCY3HELPNfbFuY6swadbcn7dwaNjeg",
+      "allowFrom": [
+        "*"
+      ],
+      "groupAllowFrom": [
+        "*"
+      ]
+    },
+    "discord": {
+      "enabled": false,
+      "token": "***",
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "allowFrom": [
+        "*"
+      ],
+      "intents": {
+        "guildMembers": true
+      },
+      "status": "online",
+      "activity": "🌙 开发者社区运营中 | ZWISERFIT",
+      "activityType": 3,
+      "proxy": "http://127.0.0.1:7891",
+      "guilds": {
+        "1516060680078364712": {
+          "requireMention": false,
+          "users": [
+            "1516023539571097702"
+          ]
+        }
+      }
+    }
+  },
+  "auth": {
+    "profiles": {
+      "deepseek:shuyu": {
+        "provider": "deepseek",
+        "mode": "api_key"
+      },
+      "deepseek-shuyu:shuyu": {
+        "provider": "deepseek-shuyu",
+        "mode": "api_key"
+      }
+    }
+  },
+  "models": {
+    "providers": {
+      "qwen": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "OC_QWEN_API_KEY"
+        },
+        "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "models": [
+          {
+            "id": "qwen3.7-flash",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.7 Flash"
+          },
+          {
+            "id": "qwen-plus",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen Plus"
+          },
+          {
+            "id": "qwen-max",
+            "api": "openai-completions",
+            "contextWindow": 32768,
+            "maxTokens": 8192,
+            "name": "Qwen Max"
+          }
+        ]
+      },
+      "deepseek-shuyu": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "OC_DEEPSEEK_SHUYU_API_KEY"
+        },
+        "baseUrl": "http://127.0.0.1:8765/v1",
+        "models": [
+          {
+            "id": "deepseek-v4-flash",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Flash"
+          },
+          {
+            "id": "deepseek-v4-pro",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Pro"
+          },
+          {
+            "id": "deepseek-chat",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "DeepSeek Chat"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.8 Max (TokenPlan)"
+          }
+        ],
+        "timeoutSeconds": 300
+      },
+      "deepseek-momo": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "OC_DEEPSEEK_MOMO_API_KEY"
+        },
+        "baseUrl": "http://127.0.0.1:8765/v1",
+        "models": [
+          {
+            "id": "deepseek-v4-flash",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Flash"
+          },
+          {
+            "id": "deepseek-v4-pro",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Pro"
+          },
+          {
+            "id": "deepseek-chat",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "DeepSeek Chat"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.8 Max (TokenPlan)"
+          }
+        ],
+        "timeoutSeconds": 300
+      },
+      "deepseek-stella": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "OC_DEEPSEEK_STELLA_API_KEY"
+        },
+        "baseUrl": "http://127.0.0.1:8765/v1",
+        "models": [
+          {
+            "id": "deepseek-v4-flash",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Flash"
+          },
+          {
+            "id": "deepseek-v4-pro",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Pro"
+          },
+          {
+            "id": "deepseek-chat",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "DeepSeek Chat"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.8 Max (TokenPlan)"
+          }
+        ],
+        "timeoutSeconds": 300
+      },
+      "deepseek-luna": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "OC_DEEPSEEK_LUNA_API_KEY"
+        },
+        "baseUrl": "http://127.0.0.1:8765/v1",
+        "models": [
+          {
+            "id": "deepseek-v4-flash",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Flash"
+          },
+          {
+            "id": "deepseek-v4-pro",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Pro"
+          },
+          {
+            "id": "deepseek-chat",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "DeepSeek Chat"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.8 Max (TokenPlan)"
+          }
+        ],
+        "timeoutSeconds": 300
+      },
+      "deepseek-zeus": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "OC_DEEPSEEK_ZEUS_API_KEY"
+        },
+        "baseUrl": "http://127.0.0.1:8765/v1",
+        "models": [
+          {
+            "id": "deepseek-v4-flash",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Flash"
+          },
+          {
+            "id": "deepseek-v4-pro",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Pro"
+          },
+          {
+            "id": "deepseek-chat",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "DeepSeek Chat"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.8 Max (TokenPlan)"
+          }
+        ],
+        "timeoutSeconds": 300
+      },
+      "deepseek-baron": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "OC_DEEPSEEK_BARON_API_KEY"
+        },
+        "baseUrl": "http://127.0.0.1:8765/v1",
+        "models": [
+          {
+            "id": "deepseek-v4-flash",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Flash"
+          },
+          {
+            "id": "deepseek-v4-pro",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Pro"
+          },
+          {
+            "id": "deepseek-chat",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "DeepSeek Chat"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.8 Max (TokenPlan)"
+          }
+        ],
+        "timeoutSeconds": 300
+      },
+      "deepseek-ethan": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "OC_DEEPSEEK_ETHAN_API_KEY"
+        },
+        "baseUrl": "http://127.0.0.1:8765/v1",
+        "models": [
+          {
+            "id": "deepseek-v4-flash",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Flash"
+          },
+          {
+            "id": "deepseek-v4-pro",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Pro"
+          },
+          {
+            "id": "deepseek-chat",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "DeepSeek Chat"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.8 Max (TokenPlan)"
+          }
+        ],
+        "timeoutSeconds": 300
+      },
+      "deepseek-nova": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "OC_DEEPSEEK_NOVA_API_KEY"
+        },
+        "baseUrl": "http://127.0.0.1:8765/v1",
+        "models": [
+          {
+            "id": "deepseek-v4-flash",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Flash"
+          },
+          {
+            "id": "deepseek-v4-pro",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Pro"
+          },
+          {
+            "id": "deepseek-chat",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "DeepSeek Chat"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.8 Max (TokenPlan)"
+          }
+        ],
+        "timeoutSeconds": 300
+      },
+      "deepseek-tristan": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "OC_DEEPSEEK_TRISTAN_API_KEY"
+        },
+        "baseUrl": "http://127.0.0.1:8765/v1",
+        "models": [
+          {
+            "id": "deepseek-v4-flash",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Flash"
+          },
+          {
+            "id": "deepseek-v4-pro",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Pro"
+          },
+          {
+            "id": "deepseek-chat",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "DeepSeek Chat"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.8 Max (TokenPlan)"
+          }
+        ],
+        "timeoutSeconds": 300
+      },
+      "novarouteai": {
+        "apiKey": {
+          "source": "env",
+          "provider": "env",
+          "id": "NOVAROUTEAI_API_KEY"
+        },
+        "baseUrl": "https://novarouteai.com/v1",
+        "models": [
+          {
+            "id": "glm-5.2",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "GLM 5.2"
+          },
+          {
+            "id": "qwen3.7-plus",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.7 Plus"
+          },
+          {
+            "id": "qwen3.6-flash",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.6 Flash"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Pro"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 1000000,
+            "maxTokens": 384000,
+            "name": "DeepSeek V4 Flash"
+          },
+          {
+            "id": "kimi-k2.7-code",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Kimi K2.7 Code"
+          },
+          {
+            "id": "kimi/kimi-k3",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Kimi K3"
+          }
+        ]
+      },
+      "token-plan": {
+        "baseUrl": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        "apiKey": "***",
+        "models": [
+          {
+            "id": "qwen3.7-plus",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.7 Plus (TokenPlan)"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.8 Max (TokenPlan)"
+          },
+          {
+            "id": "qwen3.6-flash",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "Qwen3.6 Flash (TokenPlan)"
+          },
+          {
+            "id": "qwen3.7-max",
+            "api": "openai-completions",
+            "contextWindow": 32768,
+            "maxTokens": 8192,
+            "name": "Qwen3.7 Max (TokenPlan)"
+          },
+          {
+            "id": "glm-5.2",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "GLM-5.2 (TokenPlan)"
+          },
+          {
+            "id": "qwen3.8-max",
+            "api": "openai-completions",
+            "contextWindow": 131072,
+            "maxTokens": 8192,
+            "name": "DeepSeek V4 Pro (TokenPlan)"
+          }
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "load": {
+      "paths": []
+    },
+    "allow": [
+      "wecom-openclaw-plugin",
+      "feishu",
+      "deepseek",
+      "bonjour",
+      "memory-core",
+      "searxng",
+      "discord",
+      "eaoe-pipeline",
+      "sse-recorder",
+      "qwen"
+    ],
+    "entries": {
+      "wecom-openclaw-plugin": {
+        "enabled": true
+      },
+      "deepseek": {
+        "enabled": true
+      },
+      "bonjour": {
+        "enabled": true
+      },
+      "searxng": {
+        "config": {
+          "webSearch": {
+            "baseUrl": "http://127.0.0.1:8888"
+          }
+        },
+        "enabled": true
+      },
+      "discord": {
+        "enabled": true
+      },
+      "eaoe-pipeline": {
+        "enabled": false,
+        "hooks": {
+          "allowPromptInjection": true,
+          "allowConversationAccess": true,
+          "timeoutMs": 5000,
+          "timeouts": {
+            "before_prompt_build": 3000,
+            "before_agent_reply": 4000,
+            "after_api_call": 3000,
+            "agent_end": 2000,
+            "after_compaction": 5000
+          }
+        }
+      },
+      "sse-recorder": {
+        "enabled": true,
+        "hooks": {
+          "allowConversationAccess": true,
+          "timeoutMs": 5000,
+          "timeouts": {
+            "llm_output": 3000,
+            "model_call_ended": 2000,
+            "model_call_started": 1000
+          }
+        }
+      },
+      "qwen": {
+        "enabled": true
+      }
+    },
+    "bundledDiscovery": "compat"
+  },
+  "tools": {
+    "agentToAgent": {
+      "enabled": true,
+      "allow": [
+        "*"
+      ]
+    },
+    "sessions": {
+      "visibility": "all"
+    },
+    "web": {
+      "search": {
+        "provider": "searxng"
+      }
+    },
+    "alsoAllow": [
+      "wecom_mcp",
+      "wecom-cli"
+    ],
+    "exec": {
+      "host": "gateway",
+      "mode": "full"
+    }
+  },
+  "skills": {
+    "entries": {
+      "1password": {
+        "enabled": false
+      },
+      "apple-notes": {
+        "enabled": false
+      },
+      "apple-reminders": {
+        "enabled": false
+      },
+      "bear-notes": {
+        "enabled": false
+      },
+      "blogwatcher": {
+        "enabled": false
+      },
+      "blucli": {
+        "enabled": false
+      },
+      "bluebubbles": {
+        "enabled": false
+      },
+      "camsnap": {
+        "enabled": false
+      },
+      "clawhub": {
+        "enabled": false
+      },
+      "coding-agent": {
+        "enabled": false
+      },
+      "discord": {
+        "enabled": false
+      },
+      "eightctl": {
+        "enabled": false
+      },
+      "gemini": {
+        "enabled": false
+      },
+      "gh-issues": {
+        "enabled": false
+      },
+      "gifgrep": {
+        "enabled": false
+      },
+      "github": {
+        "enabled": false
+      },
+      "gog": {
+        "enabled": false
+      },
+      "goplaces": {
+        "enabled": false
+      },
+      "himalaya": {
+        "enabled": false
+      },
+      "imsg": {
+        "enabled": false
+      },
+      "mcporter": {
+        "enabled": false
+      },
+      "model-usage": {
+        "enabled": false
+      },
+      "nano-pdf": {
+        "enabled": false
+      },
+      "notion": {
+        "enabled": false
+      },
+      "obsidian": {
+        "enabled": false
+      },
+      "openai-whisper": {
+        "enabled": false
+      },
+      "openai-whisper-api": {
+        "enabled": false
+      },
+      "openhue": {
+        "enabled": false
+      },
+      "oracle": {
+        "enabled": false
+      },
+      "ordercli": {
+        "enabled": false
+      },
+      "peekaboo": {
+        "enabled": false
+      },
+      "sag": {
+        "enabled": false
+      },
+      "sherpa-onnx-tts": {
+        "enabled": false
+      },
+      "slack": {
+        "enabled": false
+      },
+      "songsee": {
+        "enabled": false
+      },
+      "sonoscli": {
+        "enabled": false
+      },
+      "spotify-player": {
+        "enabled": false
+      },
+      "summarize": {
+        "enabled": false
+      },
+      "things-mac": {
+        "enabled": false
+      },
+      "trello": {
+        "enabled": false
+      },
+      "voice-call": {
+        "enabled": false
+      },
+      "wacli": {
+        "enabled": false
+      },
+      "xurl": {
+        "enabled": false
+      }
+    }
+  },
+  "mcp": {
+    "servers": {
+      "agentmemory": {
+        "command": "npx",
+        "args": [
+          "@agentmemory/agentmemory",
+          "mcp"
+        ],
+        "env": {
+          "PATH": "/home/agentuser/.npm-global/bin:/usr/local/bin:/usr/bin:/bin",
+          "HOME": "/home/agentuser"
+        }
+      }
+    }
+  },
+  "bindings": [
+    {
+      "type": "route",
+      "agentId": "baron",
+      "match": {
+        "channel": "wecom",
+        "accountId": "baron"
+      }
+    },
+    {
+      "type": "route",
+      "agentId": "ethan",
+      "match": {
+        "channel": "wecom",
+        "accountId": "ethan"
+      }
+    },
+    {
+      "type": "route",
+      "agentId": "tristan",
+      "match": {
+        "channel": "wecom",
+        "accountId": "tristan"
+      }
+    },
+    {
+      "type": "route",
+      "agentId": "stella",
+      "match": {
+        "channel": "wecom",
+        "accountId": "stella"
+      }
+    },
+    {
+      "type": "route",
+      "agentId": "nova",
+      "match": {
+        "channel": "wecom",
+        "accountId": "nova"
+      }
+    },
+    {
+      "type": "route",
+      "agentId": "luna",
+      "match": {
+        "channel": "wecom",
+        "accountId": "luna"
+      }
+    },
+    {
+      "type": "route",
+      "agentId": "zeus",
+      "match": {
+        "channel": "wecom",
+        "accountId": "zeus"
+      }
+    },
+    {
+      "type": "route",
+      "agentId": "luna",
+      "match": {
+        "channel": "discord",
+        "guildId": "1516060680078364712"
+      }
+    }
+  ],
+  "messages": {
+    "groupChat": {
+      "visibleReplies": "automatic"
+    }
+  },
+  "secrets": {
+    "providers": {
+      "env": {
+        "source": "env",
+        "allowlist": [
+          "OC_DEEPSEEK_BARON_API_KEY",
+          "OC_DEEPSEEK_ETHAN_API_KEY",
+          "OC_DEEPSEEK_LUNA_API_KEY",
+          "OC_DEEPSEEK_MOMO_API_KEY",
+          "OC_DEEPSEEK_NOVA_API_KEY",
+          "OC_DEEPSEEK_SHUYU_API_KEY",
+          "OC_DEEPSEEK_STELLA_API_KEY",
+          "OC_DEEPSEEK_TRISTAN_API_KEY",
+          "OC_DEEPSEEK_ZEUS_API_KEY",
+          "OC_QWEN_API_KEY",
+          "OC_MEMORY_SEARCH_API_KEY",
+          "OC_DEEPSEEK_API_KEY_DISABLED",
+          "NOVAROUTEAI_API_KEY",
+          "OC_TOKEN_PLAN_API_KEY"
+        ]
+      }
+    }
+  },
+  "wizard": {
+    "lastRunAt": "2026-08-02T14:39:06.678Z",
+    "lastRunVersion": "2026.5.28",
+    "lastRunCommand": "doctor",
+    "lastRunMode": "local"
+  }
+}
