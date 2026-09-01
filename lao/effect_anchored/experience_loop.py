@@ -555,6 +555,13 @@ class ExperienceLoop:
                 self.bus.cognitive.register_unalterable(aid)
         except Exception:
             pass
+        # 后训练第一批 A1/A2(2026-09-01·99号批件全批): 确权成功 → 原卷留档挂点。
+        # 默认关闭(无授权记录即静默直返)；守护包裹，任何异常不得破坏确权主流程。
+        try:
+            from lao.effect_anchored.raw_trace.hook import register_confirmed_anchor
+            register_confirmed_anchor(aid, owner, cur)
+        except Exception:
+            pass
         return {"anchor_id": aid, "domain": domain, "attestation": attestation,
                 "asset_id": asset.asset_id}
 
