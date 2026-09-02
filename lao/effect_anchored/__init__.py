@@ -20,7 +20,7 @@ Layers:
 Built from 120+ days of 9-agent autonomous operation in a physical retail store.
 """
 
-__version__ = "0.1.0-alpha"
+__version__ = "0.2.0"
 
 # Ontology stage: honest labeling of current data sources
 # phase_1 = static rules + manual error archiving + bash constraint generation

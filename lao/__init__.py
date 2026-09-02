@@ -32,7 +32,7 @@ from .evolution.constraint_generator import (
 )
 from .evolution.rule_registry import RuleRegistry
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     "LAOAgent",
     "HumanNatureEngine",
