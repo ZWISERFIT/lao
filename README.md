@@ -15,8 +15,9 @@ You need a trusted, independent third party — aligned with your interests, pro
 ### What LAO does for you · LAO为你做三件事
 
 **1. Save money · 省钱**
-Per-task model selection + cache-aware request optimization. The small share of requests that miss still burns most of the budget — LAO goes after exactly that.
-（实测数字以官方对账为准，对账完成前此处不引数。Measured figures pending official reconciliation.）
+Two layers: a pre-routing heuristic prediction, then post-hoc reconciliation against official `amount`/`cost` CSV. LAO has no provider telemetry.
+两层口径：路由前按任务与模型目录作启发式预判；事后以官方 `amount`/`cost` CSV 真实计量对账。LAO 不读取 provider 真实遥测。
+（实测数字以官方对账为准，对账完成前此处不引数。Measured figures pending official reconciliation. Any causal saving claim is pending reconciliation.）
 
 **2. Memory · 记忆**
 Experience settles in as you work — mistakes become permanent constraints, context is pruned to what matters.

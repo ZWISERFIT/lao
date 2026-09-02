@@ -371,6 +371,10 @@ class ModelRouter:
     #   novarouteai(novarouteai.com):  deepseek-v4-pro/flash ✅, glm-5.2 ✅
     # 降级链用 deepseek-v4-pro（三 provider 通用），避免 flash 打 token-plan 403
     # credit_mode="avoid"时自动滤除所有credit=true的模型
+    # 静态目录来源：人工维护的开放层回退默认值；非 provider telemetry。
+    # 审阅日期：2026-09-02；quality/latency 为启发式评分，cost 为展示估计。
+    # 刷新纪律：provider/model 可用性优先由 openclaw.json 动态池加载；静态值仅可凭
+    # 带日期的官方价目或受控基准证据更新，并同步更新本注释。
     MODEL_POOL = {
         # === 路由决策表 v2.1 (2026-08-09 Tristan 修复·400根因) ===
         # ultra_light: 心跳/问候/状态检查 → 最低成本·最快响应
