@@ -1,3 +1,23 @@
+# LAO — Lineage Anchored Ontology
+
+> 物理域后训练先行者 · 核心框架 / Physical Domain Post-Training Pioneer · Core Framework
+
+---
+
+## 定位 / Positioning
+
+LAO 是 ZWISERFIT 的核心后训练框架，坐在 LLM 与 Runtime 之间，为每个任务选对模型、砍掉浪费的 token、把回答锚定在你的经验上。
+
+LAO is ZWISERFIT's core post-training framework, sitting between your LLM and Runtime — picking the right model, cutting wasted tokens, and anchoring answers to your experience.
+
+## 叙事线 / Narrative
+
+```
+LLM → LAO → Runtime → 物理域 → Web 5.0 生态
+```
+
+---
+
 # LAO — Long-term Anchored Ontology
 
 **Official site · 官网门店：** [zwiserfit.cn](https://zwiserfit.cn)
