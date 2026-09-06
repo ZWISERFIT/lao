@@ -18,7 +18,7 @@ LLM → LAO → Runtime → 物理域 → Web 5.0 生态
 
 ---
 
-# LAO — Long-term Anchored Ontology
+# LAO — Lineage Anchored Ontology
 
 **Official site · 官网门店：** [zwiserfit.cn](https://zwiserfit.cn)
 LAO sits between your LLM and Runtime and stops burning your tokens. Free, open source (Apache 2.0), no telemetry.

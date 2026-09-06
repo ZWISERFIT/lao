@@ -168,8 +168,18 @@ class ExperienceLoop:
           - agent_runtime(Agent运行经验) → 自动同步 Momo(不需授权·产品数据分析)
           - user_personal/collaborative(用户/协同经验) → 累计≥3条生成授权请求
         失败路由 → 错误复利(原有逻辑)。均不阻塞路由。
+
+        196号件#4 修复(2026-09-06): 每次路由后直接从路由数据创建
+        agent_runtime 经验条目并同步 Momo——修复 anchor_store 无
+        agent_runtime 类型数据导致 l3_sync 永远为空的根因。
         """
         res = self.bus.capture_route_result(provider, model, ok, error)
+        # 196号件#4: 从路由数据直接创建 agent_runtime 经验并同步 Momo
+        try:
+            entry = self._create_runtime_entry(provider, model, ok, error)
+            self._sync_runtime_to_momo(entry)
+        except Exception:
+            pass  # 同步失败不影响路由
         if ok:
             try:
                 _out = os.environ.get("LAO_L3_OUT_DIR", "data")
@@ -177,6 +187,64 @@ class ExperienceLoop:
             except Exception:
                 pass  # L3 检查失败不影响路由
         return res
+
+    def _create_runtime_entry(self, provider: str, model: str, ok: bool,
+                              error: str = "") -> dict:
+        """从路由结果创建 agent_runtime 经验条目(196号件#4)。"""
+        from datetime import datetime, timezone
+        import hashlib
+        now = datetime.now(timezone.utc)
+        raw_id = f"rt-{provider}-{model}-{now.isoformat()}-{ok}"
+        anchor_id = "rt-" + hashlib.sha256(raw_id.encode()).hexdigest()[:12]
+        return {
+            "anchor_id": anchor_id,
+            "experience_type": "agent_runtime",
+            "value": {
+                "provider": provider,
+                "model": model,
+                "success": ok,
+                "error": error[:200] if error else "",
+            },
+            "trust_weight": 0.8 if ok else 0.3,
+            "source": f"route_result_{provider}_{model}",
+            "synced_at": now.isoformat(),
+        }
+
+    def _sync_runtime_to_momo(self, entry: dict) -> int:
+        """将 agent_runtime 条目同步到 Momo inputs/ 和本地 JSONL(196号件#4)。"""
+        import json as _json
+        from datetime import datetime, timezone
+        n = 0
+        # 路径 1: Momo inputs 目录(产品数据分析)
+        momo_dir = os.path.expanduser("~/ral-store/units/product/momo/inputs")
+        # 路径 2: 本地 experience-loop 数据目录
+        local_dir = os.environ.get("LAO_L3_OUT_DIR", "data")
+        for out_dir in (momo_dir, local_dir):
+            try:
+                os.makedirs(out_dir, exist_ok=True)
+                fp = os.path.join(out_dir, "agent_runtime_experiences.jsonl")
+                # 幂等去重
+                synced_ids: set = set()
+                if os.path.exists(fp):
+                    try:
+                        for _line in open(fp, encoding="utf-8"):
+                            try:
+                                _prev = _json.loads(_line)
+                                _aid = _prev.get("anchor_id")
+                                if _aid:
+                                    synced_ids.add(str(_aid))
+                            except Exception:
+                                continue
+                    except Exception:
+                        pass
+                aid = str(entry.get("anchor_id", ""))
+                if aid and aid not in synced_ids:
+                    with open(fp, "a", encoding="utf-8") as f:
+                        f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+                    n += 1
+            except Exception:
+                continue
+        return n
 
     def l3_route_result_fanout(self, out_dir: str = "data",
                                bridge_file: Optional[str] = None) -> Dict[str, Any]:

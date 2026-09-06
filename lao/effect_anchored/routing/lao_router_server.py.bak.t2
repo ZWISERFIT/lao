@@ -41,98 +41,6 @@ from openai import OpenAI
 # LAO 路由核心(已实现·T1成本红线真实生效)
 import sys
 sys.path.insert(0, "/home/agentuser/lao-release")
-
-# ── P1-A T2 统一任务身份层（162号集成·2026-09-04） ──
-try:
-    from task_identity import TaskIdentity, compute_session_fingerprint as _t2_fingerprint, IsolationManager
-    _T2_ENABLED = True
-except ImportError:
-    _T2_ENABLED = False
-    _t2_fingerprint = None
-    IsolationManager = None
-    print("[T2] task_identity module not found, falling back to legacy SHA1 fingerprint")
-
-# ── P1-A T5 Token字段字典（162号集成·2026-09-04） ──
-try:
-    from token_dictionary import TokenRecord, ProviderStatsRegistry
-    _T5_ENABLED = True
-except ImportError:
-    _T5_ENABLED = False
-    TokenRecord = None
-    ProviderStatsRegistry = None
-    print("[T5] token_dictionary module not found, T5 disabled")
-
-# ── P1-A T7 任务状态机（162号集成·2026-09-04） ──
-try:
-    from task_state_machine import TaskStateMachine, StopLossMonitor, StopLossConfig, TaskState
-    _T7_ENABLED = True
-except ImportError:
-    _T7_ENABLED = False
-    print("[T7] task_state_machine module not found")
-
-# ── P1-A T3 上下文剪枝（162号集成·2026-09-04） ──
-try:
-    from context_pruning import ContextPruner, PruningConfig, IntentKeeper
-    _T3_ENABLED = True
-except ImportError:
-    _T3_ENABLED = False
-    print("[T3] context_pruning module not found")
-
-# ── P1-A T8 RAL最小接口（162号集成·2026-09-04） ──
-try:
-    from ral_interface import (
-        RAL_MINIMAL_INTERFACES, get_interface_spec, validate_interface_name,
-        SKILL_REGISTRY, DEFAULT_BOUNDARY
-    )
-    _T8_ENABLED = True
-    _RAL_STATE = "active"  # 创始人批示：从 prepared_not_connected → active
-except ImportError:
-    _T8_ENABLED = False
-    _RAL_STATE = "prepared_not_connected"
-    print("[T8] ral_interface module not found")
-
-# ── P1-A T6 成本对账（162号集成·2026-09-04） ──
-try:
-    from cost_reconciliation import (
-        Reconciler, ReconciliationConfig, CostRecord,
-        BILLING_SCHEMAS, get_billing_schema
-    )
-    _T6_ENABLED = True
-except ImportError:
-    _T6_ENABLED = False
-    print("[T6] cost_reconciliation module not found")
-
-# ── P1-A T9 匿名评测集（162号集成·2026-09-04） ──
-try:
-    from evaluation_suite import (
-        ABEngine, EvalDataset, DEFAULT_EVAL_DATASET, EvalReport
-    )
-    _T9_ENABLED = True
-except ImportError:
-    _T9_ENABLED = False
-    print("[T9] evaluation_suite module not found")
-
-
-
-
-
-# ── P1-A T7 止损监控（162号集成） ──
-_t7_monitor = None
-_t7_machines = {}  # task_id → TaskStateMachine
-if _T7_ENABLED:
-    _t7_monitor = StopLossMonitor(StopLossConfig())
-    print("[T7] StopLossMonitor initialized")
-
-
-
-# ── P1-A T5 Provider统计注册表（162号集成） ──
-_t5_registry = None
-if _T5_ENABLED and ProviderStatsRegistry is not None:
-    _t5_registry = ProviderStatsRegistry()
-    print("[T5] ProviderStatsRegistry initialized")
-
-
-
 from lao.effect_anchored.routing.model_router import ModelRouter, RouteSelection
 from lao.effect_anchored.routing.cost_intelligence import SavingsEngine
 # B2(2026-08-16 RIS审计修复): RIS 健康门——LAO 真正消费 ris-bridge/ris_summary,
@@ -358,61 +266,6 @@ except Exception as _loop_e:  # pragma: no cover - 环境缺件时路由照常
     logger.warning(f"ExperienceLoop 未启用: {_loop_e}")
 
 
-# ── 207号件 Phase 1 接入点 ──
-# ── 加固一: HitRateTracker 接入 ──
-try:
-    from lao.effect_anchored.routing.hit_rate_tracker import HitRateTracker
-    _HIT_RATE_TRACKER = HitRateTracker(min_samples=5)
-    print("[207-加固一] HitRateTracker 已接入")
-except Exception as _hrt_err:
-    _HIT_RATE_TRACKER = None
-    print(f"[207-加固一] HitRateTracker 未启用: {_hrt_err}")
-
-# ── 加固一: ReusableAsset + ExperienceReplay ──
-try:
-    from lao.effect_anchored.routing.reusable_asset import ReusableAssetStore
-    from lao.effect_anchored.routing.experience_replay import ExperienceReplayEngine
-    _REUSABLE_ASSET_STORE = ReusableAssetStore()
-    _EXPERIENCE_REPLAY = ExperienceReplayEngine(asset_store=_REUSABLE_ASSET_STORE, min_confidence=0.7)
-    # 启动时从 ExperienceLoop 同步已有确权经验
-    if LOOP is not None:
-        _sync_n = _REUSABLE_ASSET_STORE.sync_from_experience_loop(LOOP)
-        if _sync_n:
-            print(f"[207-加固一] 从 ExperienceLoop 同步 {_sync_n} 条可复用资产")
-    print("[207-加固一] ReusableAsset + ExperienceReplay 已接入")
-except Exception as _replay_err:
-    _REUSABLE_ASSET_STORE = None
-    _EXPERIENCE_REPLAY = None
-    print(f"[207-加固一] ExperienceReplay 未启用: {_replay_err}")
-
-# ── 加固二: Evolution 全链路串通 ──
-try:
-    from lao.effect_anchored.evolution.constraint_generator import ConstraintGenerator
-    from lao.effect_anchored.evolution.rule_registry import RuleRegistry
-    from lao.effect_anchored.evolution.atom_engine import ExperienceAtomEngine
-    _EVOLUTION_CONSTRAINTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "evolution", "constraints")
-    _EVOLUTION_CONST_GEN = ConstraintGenerator(output_dir=_EVOLUTION_CONSTRAINTS_DIR)
-    _EVOLUTION_RULE_REG = RuleRegistry()
-    _EVOLUTION_ATOM_ENGINE = ExperienceAtomEngine(
-        atoms_db=os.path.join(os.path.expanduser("~"), ".lao", "experience-atoms.json"))
-    print("[207-加固二] Evolution 全链路(ConstraintGenerator→RuleRegistry→AtomEngine) 已接入")
-except Exception as _evo_err:
-    _EVOLUTION_CONST_GEN = None
-    _EVOLUTION_RULE_REG = None
-    _EVOLUTION_ATOM_ENGINE = None
-    print(f"[207-加固二] Evolution 未启用: {_evo_err}")
-
-# ── 加固二: FlywheelTracker 接入 ──
-try:
-    from lao.effect_anchored.evolution.flywheel_tracker import FlywheelTracker
-    _FLYWHEEL = FlywheelTracker()
-    print("[207-加固二] FlywheelTracker 已接入")
-except Exception as _fw_err:
-    _FLYWHEEL = None
-    print(f"[207-加固二] FlywheelTracker 未启用: {_fw_err}")
-# ── 207号件 Phase 1 接入点 END ──
-
-
 def _loop_record(provider: str, model: str, ok: bool, error: str = "") -> None:
     """路由结果回流 FeedbackBus(L1→L2/L3·错误复利/经验复利)。失败不阻塞。"""
     if LOOP is None:
@@ -427,47 +280,6 @@ def _loop_record(provider: str, model: str, ok: bool, error: str = "") -> None:
         LOOP.l3_feedback_to_bridge()
     except Exception as e:
         logger.warning(f"loop bridge feedback fail: {e}")
-
-    # ── 207号件 加固二: Evolution 全链路 ──
-    # 错误路由 → ExperienceExtractor → ConstraintGenerator → RuleRegistry → AtomEngine
-    if not ok and error:
-        try:
-            import hashlib as _hl
-            _err_fp = _hl.sha256(f"{provider}:{model}:{error[:200]}".encode()).hexdigest()[:16]
-            # ① 错误 → 约束
-            if _EVOLUTION_CONST_GEN is not None:
-                _err_pattern = {"error_signature": f"{provider}/{model}:{error[:100]}",
-                                "category": "infrastructure", "severity": "🔴",
-                                "fingerprint": _err_fp, "actual": error[:200]}
-                _gen_result = _EVOLUTION_CONST_GEN.generate_class_name(f"C_route_{_err_fp[:8]}")
-                # ② 约束 → 规则注册
-                if _EVOLUTION_RULE_REG is not None:
-                    _rule_id = f"R_route_{_err_fp[:12]}"
-                    _EVOLUTION_RULE_REG.register(
-                        rule_id=_rule_id, fingerprint=_err_fp,
-                        constraint_id=f"C_route_{_err_fp[:8]}",
-                        error_source_id=_err_fp,
-                        severity="🔴", category="infrastructure",
-                        description=f"路由错误防护: {provider}/{model} - {error[:100]}")
-                    # ③ 规则 → 经验原子永久化
-                    if _EVOLUTION_ATOM_ENGINE is not None:
-                        _atom = _EVOLUTION_ATOM_ENGINE.ingest({
-                            "event_id": _err_fp, "failure": error[:200],
-                            "type": "failure", "impact": "+0.3",
-                            "lesson": f"避免 {provider}/{model}: {error[:100]}",
-                            "new_anchor": [f"avoid:{provider}/{model}"],
-                            "future_prevention": f"路由自动规避 {provider}/{model}",
-                        })
-                        # 如果原子升级为锚点 → 注册到可复用资产
-                        if _atom.status == "anchor" and _REUSABLE_ASSET_STORE is not None:
-                            _REUSABLE_ASSET_STORE.register_from_constraint(
-                                constraint_id=f"C_route_{_err_fp[:8]}",
-                                error_pattern=f"ERROR:{error[:200]}",
-                                solution=f"AVOID:{provider}/{model}",
-                            )
-        except Exception as _evo_err:
-            pass  # fail-open: evolution 链路故障不阻塞路由
-
 
 
 # ── 会话粘性(2026-08-16 L1命中率·最有效手段): 同一会话粘住同 provider+model ──
@@ -508,14 +320,7 @@ def _sticky_save_locked() -> None:
 
 
 def _session_fingerprint(messages: List[Dict]) -> str:
-    """会话指纹（P1-A T2 升级：SHA-256 64位 hex·碰撞抗性 160→256 位）。
-
-    162号集成·2026-09-04：优先使用 T2 task_identity.compute_session_fingerprint；
-    不可用时回退到旧 SHA1[:16]（向后兼容·旧粘性 TTL=6h 自然过期）。
-    """
-    if _T2_ENABLED and _t2_fingerprint is not None:
-        return _t2_fingerprint(messages)
-    # 回退：旧 SHA1[:16]
+    """会话指纹: 首条 system + 首条 user 消息前 512 字符的 sha1(跨轮稳定)。"""
     import hashlib as _hl
     parts = []
     for want in ("system", "user"):
@@ -1129,13 +934,6 @@ def _remaining_budget() -> float:
         return max(0.0, DAILY_BUDGET - _daily_cost["total_usd"])
 
 
-# ── 196号件#5: 省钱量化账本(2026-09-06) ──────────────────────────
-try:
-    from lao.effect_anchored.routing.cost_ledger import CostLedger
-    COST_LEDGER = CostLedger()
-except Exception:
-    COST_LEDGER = None
-
 def _record_cost(usd: float):
     _reset_daily_if_needed()
     with _lock:
@@ -1149,28 +947,6 @@ def _log_event(ev: Dict[str, Any]):
         ev["agent"] = "unknown"
     with open(EVENT_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(ev, ensure_ascii=False, default=str) + "\n")
-
-
-# ── N1 认知压缩（195号施工令 S4 · 180号规格）────────────────
-# 出厂关闭：仅当 LAO_N1_ENABLED=1 时生效；置 0 或删变量并重启即完整回滚。
-# 指标默认落 LOG_DIR/n1_compression_metrics.jsonl（180号 §4.7）。
-try:
-    from lao.effect_anchored.cognitive_compression import (
-        CognitiveCompressor as _N1Compressor,
-        load_config as _n1_load_config,
-    )
-    from lao.effect_anchored.cognitive_compression.adapters import openclaw as _n1_openclaw
-    _N1_CONFIG = _n1_load_config(
-        context="openclaw",
-        metrics_path=(os.environ.get("LAO_N1_METRICS_PATH")
-                      or os.path.join(LOG_DIR, "n1_compression_metrics.jsonl")),
-    )
-    _N1 = _N1Compressor(_N1_CONFIG)
-    _N1_ENABLED = bool(_N1_CONFIG.enabled)
-    print(f"[N1] cognitive_compression loaded, enabled={_N1_ENABLED}")
-except Exception as _n1_import_err:
-    _N1, _N1_CONFIG, _N1_ENABLED = None, None, False
-    print(f"[N1] cognitive_compression not available, N1 disabled ({_n1_import_err})")
 
 
 # ── r3 任务级成本护栏(盲点1: token上限告警+熔断 · 盲点3: 重试计数上限) ──
@@ -1206,10 +982,7 @@ def _r3_rollover_locked():
         _r3_save_ledger_locked()
 
 
-def _r3_task_key(agent: str, session_fp: str, task_id: str = "") -> str:
-    """R3 任务键（162号 T2 集成：优先用 task_id 归因）。"""
-    if task_id:
-        return f"t2|{task_id}"
+def _r3_task_key(agent: str, session_fp: str) -> str:
     return f"{agent or 'unknown'}|{session_fp or 'nofp'}"
 
 
@@ -1226,23 +999,11 @@ def _r3_retry_seq(key: str) -> int:
         return 0
 
 
-def _r3_add_tokens(agent: str, session_fp: str, tokens: int, task_id: str = "",
-                    is_side_task: bool = False):
-    """结算时累计任务 token（162号 T2 集成：side 任务隔离不计入主任务护栏）。
-
-    Args:
-        is_side_task: T2 IsolationManager 判定为 side 任务时 True，
-                      其 token 不计入主任务 R3 护栏。
-    """
+def _r3_add_tokens(agent: str, session_fp: str, tokens: int):
+    """结算时累计任务 token · 越限即打告警/熔断标记(下一次请求入口拦截)。"""
     if tokens <= 0:
         return
-    # T2 隔离：side 任务 token 不进主任务护栏
-    if is_side_task:
-        _log_event({"type": "t2_side_token_isolated", "agent": agent or "unknown",
-                    "task_id": task_id, "tokens": tokens,
-                    "reason": "side task tokens isolated from main task R3 guard"})
-        return
-    key = _r3_task_key(agent, session_fp, task_id=task_id)
+    key = _r3_task_key(agent, session_fp)
     with _r3_lock:
         _r3_rollover_locked()
         t = _r3_state["tasks"].setdefault(
@@ -1445,8 +1206,7 @@ def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
                     in_tok: int, out_tok: int, cache_hit: int, cache_miss: int,
                     stream: bool, latency_ms: int, cap_events: list,
                     status: str = "ok", error: str = "",
-                    session_fp: str = "", task_id: str = "",
-                    is_side_task: bool = False):
+                    session_fp: str = ""):
     """成本结算 + SavingsEngine + 事件落日志(流式/非流式统一入口)。
 
     C2: 流式/非流式都经此记账(_record_cost)→ 预算红线覆盖全部流量。
@@ -1457,24 +1217,9 @@ def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
     degraded = "flash" in chosen_model and "pro" in str(model_hint).lower()
     cost_yuan, pricing_regime, pricing_window, fx = _compute_cost_yuan(chosen_model, cache_hit, cache_miss, out_tok)
     _record_cost(cost_yuan / fx)
-    # 196号件#5: 省钱账本记录(不阻塞路由)
-    if COST_LEDGER is not None:
-        try:
-            COST_LEDGER.record(
-                request_id=request_id, provider=provider, model=chosen_model,
-                in_tok=in_tok, out_tok=out_tok,
-                cache_hit=cache_hit, cache_miss=cache_miss,
-                actual_cost_yuan=cost_yuan,
-                ris_blocked=False,  # RIS 阻断在更早的 _ris_guard 层处理
-                latency_ms=latency_ms, status=status,
-                agent=agent, tier=tier,
-            )
-        except Exception:
-            pass  # 账本记录失败不影响路由
     # r3 盲点1: 任务级 token 累计(越限告警/熔断由下一次请求入口拦截·fail-open 不阻塞结算)
     try:
-        _r3_add_tokens(agent, session_fp, int(in_tok or 0) + int(out_tok or 0),
-                       task_id=task_id, is_side_task=is_side_task)
+        _r3_add_tokens(agent, session_fp, int(in_tok or 0) + int(out_tok or 0))
     except Exception:
         pass
     baseline_model = (model_hint.split("/")[-1] if model_hint else "") or "deepseek-v4-pro"
@@ -1512,8 +1257,6 @@ def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
         "fallback_chain": sel.fallback_chain,
         "capability_events": cap_events,   # Phase A/B: 参数过滤事件(TrustEvent 链)
         "session_fp": session_fp,
-        "task_id": task_id,
-        "is_side_task": is_side_task,
         # L-A4(2026-08-29): 取证字段 — 任务标识与重试序号
         "task_key": _task_key,
         "retry_seq": _retry_seq,
@@ -1526,68 +1269,6 @@ def _settle_and_log(*, request_id: str, tier: str, agent: str, model_hint: str,
                        cost_usd=cost_yuan / fx, degraded=degraded)
     # 三层Loop回流(2026-08-16): L1结果→L2经验工厂(错误复利/经验复利)
     _loop_record(provider, chosen_model, ok=(status == "ok"), error=error)
-
-    # ── 207号件 加固一: HitRateTracker 记录 ──
-    if _HIT_RATE_TRACKER is not None:
-        try:
-            _is_hit = (cache_hit > 0 and cache_hit > cache_miss)
-            _HIT_RATE_TRACKER.record(
-                model=chosen_model, hit=_is_hit,
-                tokens_hit=cache_hit, tokens_miss=cache_miss,
-                meta={"provider": provider, "agent": agent, "tier": tier})
-        except Exception:
-            pass  # fail-open
-    # ── 207号件 加固二: FlywheelTracker 记录 ──
-    if _FLYWHEEL is not None:
-        try:
-            _is_hit = (cache_hit > 0 and cache_hit > cache_miss)
-            _FLYWHEEL.record_route(hit=_is_hit)
-            if cache_hit > 0:
-                _FLYWHEEL.record_tokens_saved(cache_hit)
-        except Exception:
-            pass  # fail-open
-
-    # ── P1-A T7: StopLossMonitor 并行记录 ──
-    if _T7_ENABLED and _t7_monitor is not None and task_id:
-        try:
-            t7_result = _t7_monitor.add_tokens(task_id, int(in_tok or 0) + int(out_tok or 0))
-            if t7_result.get("new_alert"):
-                _log_event({"type": "t7_stop_alert", "task_id": task_id,
-                            "tokens": t7_result["tokens"],
-                            "threshold": _t7_monitor.config.alert_tokens})
-            if t7_result.get("broken"):
-                _log_event({"type": "t7_stop_breaker", "task_id": task_id,
-                            "tokens": t7_result["tokens"],
-                            "threshold": _t7_monitor.config.hard_tokens})
-        except Exception:
-            pass
-    # ── P1-A T5: 标准化 TokenRecord 喂入 ProviderStatsRegistry ──
-    if _T5_ENABLED and _t5_registry is not None and TokenRecord is not None:
-        try:
-            _t5_rec = TokenRecord.create(
-                request_id=request_id, provider=provider, model=chosen_model,
-                input_tokens=in_tok, output_tokens=out_tok,
-                cache_hit_tokens=cache_hit, cache_miss_tokens=cache_miss,
-                cost_yuan=cost_yuan, pricing_regime=pricing_regime,
-                task_id=task_id, source="routing_settle")
-            _t5_registry.record(_t5_rec)
-        except Exception:
-            pass  # T5 记录失败不影响主流程
-
-    # ── 207号件 加固一: 成功路由 → 注册可复用资产 ──
-    if status == "ok" and _REUSABLE_ASSET_STORE is not None:
-        try:
-            # 从经验直答或已有经验中获取答案（这里记录路由成功模式）
-            _REUSABLE_ASSET_STORE.register(
-                pattern=f"route_ok:{tier}:{agent}:{chosen_model}",
-                solution=f"provider={provider},model={chosen_model} 路由成功",
-                category="routing", confidence=0.5,
-                tags=[f"provider:{provider}", f"model:{chosen_model}", f"tier:{tier}"],
-            )
-        except Exception:
-            pass  # fail-open
-
-
     # 会话粘性: 成功 → 记住本次 provider+model(下轮同会话复用→前缀命中)
     if status == "ok":
         _sticky_put(session_fp, provider, chosen_model, agent)
@@ -1634,80 +1315,12 @@ def r3_status():
         return {"error": str(e)}
 
 
-
-@app.get("/v1/replay/status")
-def replay_status():
-    """207号件: ExperienceReplay 经验直返引擎状态。"""
-    if _EXPERIENCE_REPLAY is None:
-        return {"enabled": False}
-    try:
-        return {"enabled": True, **_EXPERIENCE_REPLAY.stats()}
-    except Exception as e:
-        return {"enabled": True, "error": str(e)}
-
-
-@app.get("/v1/hitrate/status")
-def hitrate_tracker_status():
-    """207号件: HitRateTracker 命中率追踪器状态。"""
-    if _HIT_RATE_TRACKER is None:
-        return {"enabled": False}
-    try:
-        return {"enabled": True, "stats": _HIT_RATE_TRACKER.all_stats(),
-                "global_hit_rate": _HIT_RATE_TRACKER.hit_rate(),
-                "feedback": _HIT_RATE_TRACKER.to_experience_feedback()}
-    except Exception as e:
-        return {"enabled": True, "error": str(e)}
-
-
-@app.get("/v1/flywheel/status")
-def flywheel_status():
-    """207号件: FlywheelTracker 飞轮引擎状态。"""
-    if _FLYWHEEL is None:
-        return {"enabled": False}
-    try:
-        return {"enabled": True, **_FLYWHEEL.health_report()}
-    except Exception as e:
-        return {"enabled": True, "error": str(e)}
-
-
-@app.get("/v1/evolution/status")
-def evolution_status():
-    """207号件: Evolution 全链路状态。"""
-    result = {"constraint_gen": _EVOLUTION_CONST_GEN is not None,
-              "rule_registry": _EVOLUTION_RULE_REG is not None,
-              "atom_engine": _EVOLUTION_ATOM_ENGINE is not None}
-    if _EVOLUTION_ATOM_ENGINE is not None:
-        try:
-            result["atom_stats"] = _EVOLUTION_ATOM_ENGINE.stats()
-        except Exception:
-            pass
-    if _EVOLUTION_RULE_REG is not None:
-        try:
-            result["active_rules"] = len(_EVOLUTION_RULE_REG.list_active())
-        except Exception:
-            pass
-    return result
-
-
-
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = await request.json()
     # m3: request_id 贯穿该请求的全部日志事件(优先透传 x-request-id)
     request_id = (request.headers.get("x-request-id") or "").strip() or uuid.uuid4().hex[:12]
     messages = body.get("messages", [])
-    # 175-ruling P1: 输入校验（messages 长度 + 单条 content 长度）
-    if not isinstance(messages, list) or len(messages) == 0:
-        return JSONResponse(status_code=400, content={"error": "messages must be a non-empty list"})
-    if len(messages) > 100:
-        return JSONResponse(status_code=400, content={"error": "messages exceeds 100 items"})
-    for _m in messages:
-        _c = _m.get("content", "") if isinstance(_m, dict) else ""
-        _role = _m.get("role", "") if isinstance(_m, dict) else ""
-        # 175-ruling P1-b v2: system消息放宽至64K(agent工具schema天然大), user/assistant保持10K
-        _limit = 64000 if _role in ("system", "tool") else 10000
-        if isinstance(_c, str) and len(_c) > _limit:
-            return JSONResponse(status_code=400, content={"error": f"message content exceeds {_limit} chars (role={_role})"})
     model_hint = body.get("model", "")
     stream = body.get("stream", False)
 
@@ -1716,19 +1329,6 @@ async def chat_completions(request: Request):
 
     # 按 Agent 分发独立 key(治本·B1)·创始人 B 阶段: 先提取 agent 供路由绑定 provider
     agent = _extract_agent(model_hint, dict(request.headers))
-
-    # ── T3 上下文剪枝（193号件·接入请求管线）──
-    if _T3_ENABLED and len(messages) > 2:
-        try:
-            _pruner = ContextPruner(PruningConfig(keep_recent_turns=5))
-            _prune_result = _pruner.prune(messages, intent="")
-            if _prune_result["compressed_count"] > 0:
-                messages = _prune_result["pruned_messages"]
-                _log_event({"type": "t3_pruned", "compressed": _prune_result["compressed_count"], "original": _prune_result["original_count"], "pruned": _prune_result["pruned_count"]})
-
-        except Exception as _e:
-            pass  # fail-open: 剪枝失败不阻塞请求
-
 
     # v3.5.1-wiring: W1 入站萃取·请求事件记录(上下文重建证据链)
     if CONTEXT_REBUILDER is not None:
@@ -1804,31 +1404,6 @@ async def chat_completions(request: Request):
             return _r3_rblk
     except Exception:
         pass  # fail-open: 护栏自身故障不得阻塞路由(但会在日志缺失护栏事件·监控侧可查)
-
-    # ── 207号件 加固一: ExperienceReplay 路由前查询(优先于 W3) ──
-    if _EXPERIENCE_REPLAY is not None and task_text:
-        try:
-            _replay_match = _EXPERIENCE_REPLAY.query(task_text, tier=tier, agent=agent or "")
-            if _replay_match is not None and _replay_match.get("answer"):
-                _replay_resp = _EXPERIENCE_REPLAY.build_response(
-                    _replay_match, model_hint=model_hint, request_id=request_id)
-                if _replay_resp:
-                    try:
-                        await asyncio.to_thread(_log_event, {
-                            "type": "experience_replay_hit",
-                            "request_id": request_id, "agent": agent or "unknown",
-                            "tier": tier, "model": "lao-experience-replay",
-                            "asset_id": _replay_match.get("asset_id", ""),
-                            "confidence": _replay_match.get("confidence", 0),
-                            "cost_saved": "100%",
-                            "latency_ms": int((time.time() - started) * 1000),
-                        })
-                    except Exception:
-                        pass
-                    return JSONResponse(_replay_resp)
-        except Exception:
-            pass  # fail-open: ExperienceReplay 故障不阻塞路由
-
 
     # v3.5.1-wiring: W3 经验直答·双重确认(经验匹配 + 认知匹配 才全短路·省100%成本)
     _exp_match = None
@@ -2003,32 +1578,6 @@ async def chat_completions(request: Request):
     # ③ 转发真实 provider(按 chosen_provider 动态选 base_url + key·白名单过滤+能力协商)
     client = _provider_client(chosen_provider, agent)
     payload, cap_events = _safe_payload(body, chosen_model)
-    # ── N1 认知压缩（195号 S4）───────────────────────────────
-    # 落点定在 _safe_payload 之后而不是 180号 §4.1 字面的「之前」：真实代码里
-    # _stabilize_messages 是 _safe_payload 内部的一步，tools 也是在 _safe_payload 里按
-    # SUPPORTED_PARAMS 过滤进 payload 的，故「messages 已稳定化 且 tools 已就位」的唯一位置就是此处。
-    # 只动 payload["tools"]，不碰 messages（180号 C1/C3）；任何异常一律 fail-open。
-    _n1_decision = None
-    if _N1_ENABLED and _N1 is not None:
-        try:
-            _n1_decision = _n1_openclaw.compress_payload(
-                payload, _N1, agent=agent, request_id=request_id)
-            if not _n1_decision.is_noop:
-                await asyncio.to_thread(_log_event, {
-                    "type": "n1_compressed", "request_id": request_id,
-                    "agent": agent, "intent": _n1_decision.intent,
-                    "tools_before": _n1_decision.original_count,
-                    "tools_after": _n1_decision.kept_count,
-                    "cache_hit": _n1_decision.cache_hit,
-                    "latency_ms": round(_n1_decision.latency_ms, 3)})
-        except Exception as _n1_err:
-            _n1_decision = None
-            try:
-                await asyncio.to_thread(_log_event, {
-                    "type": "n1_error", "request_id": request_id,
-                    "agent": agent, "error": str(_n1_err)[:200]})
-            except Exception:
-                pass
     # C22v2-20260823: deepseek thinking 强制 assistant 回传 rc → 注入占位
     if chosen_provider == "deepseek" or str(chosen_model).startswith("deepseek-"):
         _ensure_toolcall_rc(payload)
