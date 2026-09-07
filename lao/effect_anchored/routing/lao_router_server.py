@@ -2103,6 +2103,59 @@ def evolution_status():
 
 
 
+# ---- 223号施工令 #34: L3 授权确权交易链接线（默认关闭）----
+L3_USER_CHAIN_API_FLAG = "LAO_L3_USER_CHAIN_API"
+
+
+def _l3_chain_api_on() -> bool:
+    """192号默认关闭宪法: 未显式开启时写接口一律不生效。"""
+    return str(os.environ.get(L3_USER_CHAIN_API_FLAG, "")).strip().lower() in (
+        "1", "true", "yes", "on")
+
+
+@app.get("/v1/l3/user-chain/status")
+def l3_user_chain_status(owner: str = "founder"):
+    """L3 用户/协同经验链状态（只读·不改既有路由行为）。"""
+    try:
+        from lao.effect_anchored import l3_user_chain
+        return {"ok": True, "api_enabled": _l3_chain_api_on(),
+                "chain": l3_user_chain.chain_status(owner)}
+    except Exception as e:
+        return {"ok": False, "reason": "%s: %s" % (type(e).__name__, e)}
+
+
+@app.post("/v1/l3/user-chain/confirm")
+async def l3_user_chain_confirm(request: Request):
+    """Ethan 确权打标: consent_gate upload 阶段闸门·未授权即阻断。"""
+    if not _l3_chain_api_on():
+        return {"ok": False, "reason": "feature_flag_off",
+                "flag": L3_USER_CHAIN_API_FLAG}
+    try:
+        body = await request.json()
+        from lao.effect_anchored import l3_user_chain
+        return l3_user_chain.confirm_rights(
+            str(body.get("owner", "")), str(body.get("domain", "")),
+            anchor_ids=body.get("anchor_ids"))
+    except Exception as e:
+        return {"ok": False, "reason": "%s: %s" % (type(e).__name__, e)}
+
+
+@app.post("/v1/l3/user-chain/publish")
+async def l3_user_chain_publish(request: Request):
+    """上架交 Zeus: trade 阶段闸门 + 交易开关，双重默认关闭。"""
+    if not _l3_chain_api_on():
+        return {"published": False, "reason": "feature_flag_off",
+                "flag": L3_USER_CHAIN_API_FLAG}
+    try:
+        body = await request.json()
+        from lao.effect_anchored import l3_user_chain
+        return l3_user_chain.publish_to_zeus(
+            str(body.get("owner", "")), str(body.get("domain", "")),
+            anchor_ids=body.get("anchor_ids"))
+    except Exception as e:
+        return {"published": False, "reason": "%s: %s" % (type(e).__name__, e)}
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = await request.json()

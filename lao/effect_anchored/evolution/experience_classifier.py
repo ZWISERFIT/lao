@@ -37,6 +37,14 @@ _USER_SIGNAL_KEYS = ("user_id", "user_statement", "user_preference", "personal_d
 _COLLAB_SIGNAL_KEYS = ("human_feedback", "human_input", "user_correction",
                        "agent_action", "collaboration", "human_agent")
 _EXPLICIT_TYPE_VALUES = {c.value for c in ExperienceCategory}
+# 223号施工令 #34: 与 experience_loop / l3_user_chain 的小写口径对齐
+# (loop 侧历史取值: agent_runtime / user_personal / collaborative)
+_TYPE_ALIASES = {
+    "AGENT_RUNTIME": ExperienceCategory.AGENT_RUNTIME,
+    "USER_PERSONAL": ExperienceCategory.USER_PERSONAL,
+    "HUMAN_AGENT_COLLAB": ExperienceCategory.HUMAN_AGENT_COLLAB,
+    "COLLABORATIVE": ExperienceCategory.HUMAN_AGENT_COLLAB,
+}
 
 
 @dataclass
@@ -81,6 +89,8 @@ class ExperienceClassifier:
         explicit = str(exp.get("experience_type", "")).upper()
         if explicit in _EXPLICIT_TYPE_VALUES:
             return ExperienceCategory(explicit)
+        if explicit in _TYPE_ALIASES:   # 223号 #34: collaborative 等别名
+            return _TYPE_ALIASES[explicit]
 
         # 规则2: 人-Agent 协同(人类侧信号 + Agent 侧信号同时出现)
         has_human = any(k in exp and exp.get(k) for k in

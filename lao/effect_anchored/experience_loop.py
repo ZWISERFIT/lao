@@ -781,7 +781,9 @@ class ExperienceLoop:
             return []
 
     def l3_check_and_request_authorization(self, out_dir: str = "data",
-                                           threshold: int = 3) -> Dict[str, Any]:
+                                           threshold: int = 10) -> Dict[str, Any]:
+        # 223号施工令 #34 签章口径(2026-09-08): 阈值 10 条(原 3 条),
+        # 同一 owner + 同一 domain 累计 10 条, 错误类与成功类都计入
         import uuid
         from datetime import datetime, timezone
         """L3①: 累计未授权经验≥threshold条 → 生成授权请求(写 pending 文件)。

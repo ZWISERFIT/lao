@@ -7,14 +7,14 @@ Consent Integration — LAO v3.1 P1-4
 在关键动作前检查四阶段授权(consent_gate.FOUR_STAGES):
   ① cost      : Router 模型路由前 → 检查「成本追踪」授权
   ③ upload    : Ethan 经验上传前 → 检查「经验上传评估」授权
-  ④ trade     : Melody 确认交易前 → 检查「确权交易」授权
+  ④ trade     : Zeus 确认交易前 → 检查「确权交易」授权
   ③ + ④      : Factory 生产经验时 → 检查「上传 + 交易」授权
 
 用法(在对应集成点调用):
   gate = FourStageConsent()
   ok = guard_route(gate, owner)        # False=未授权·应阻止路由
   ok = guard_upload(gate, owner, exp)  # False=未授权·应阻止上传Ethan
-  ok = guard_trade(gate, owner, price) # False=未授权·应阻止Melody交易
+  ok = guard_trade(gate, owner, price) # False=未授权·应阻止Zeus交易
   ok = guard_factory(gate, owner)      # False=未授权·应阻止生产/上传/交易
 
 每个 guard 返回 (granted, reason): 明确未授权原因, 供调用方反馈给用户。
@@ -50,16 +50,19 @@ def guard_upload(consent: FourStageConsent, owner: str,
     return _stage_gate(consent, "upload", owner, domain)
 
 
+# 223号 #34: guard_trade 的 domain 默认值保持 "melody" 不变——该值是
+# owner:domain 存档键，改默认会使既有已授权记录失效；#34 链路显式传
+# l3-user/<domain>（见 l3_user_chain.consent_domain）。
 def guard_trade(consent: FourStageConsent, owner: str,
                 price: Optional[float] = None,
                 domain: str = "melody") -> Tuple[bool, str]:
-    """④ Melody 确权交易前: 检查「确权交易」授权。"""
+    """④ Zeus 确权交易前: 检查「确权交易」授权。"""
     return _stage_gate(consent, "trade", owner, domain)
 
 
 def guard_factory(consent: FourStageConsent, owner: str,
                   domain: str = "experience") -> Tuple[bool, str]:
-    """Factory 生产经验时: 需「上传(经验域) + 交易(Melody域)」双授权。"""
+    """Factory 生产经验时: 需「上传(经验域) + 交易(Zeus域)」双授权。"""
     up_ok, up_reason = _stage_gate(consent, "upload", owner, "experience")
     if not up_ok:
         return False, up_reason

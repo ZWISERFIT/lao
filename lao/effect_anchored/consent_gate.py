@@ -12,7 +12,7 @@ Consent Gate — LAO 2.7 P0-2
 三个确认语义（对齐工单 checkboxes）:
   1. 同意共享哈希化经验元数据至 ZWISERFIT 网络
   2. 理解原始经验仅存储本地（不上传 / 平台技术上无法访问）
-  3. 理解共享后可在 Melody 市场交易
+  3. 理解共享后可在 Zeus 交易平台交易
 
 用法:
   gate = ConsentGate(store_path=...)          # 本地持久化授权记录
@@ -31,6 +31,9 @@ from typing import Any, Dict, List, Optional
 
 
 # 三项授权确认语义（对齐 Zeus P0-2 checkboxes）
+# 223号施工令 #34(2026-09-08): 交易主体=Zeus 管理交易（Melody 市场降为会员侧口径）。
+# 授权项 id 一律不改（melody_market_tradable 保留），避免既有
+# consent_gate.json / consent.json 存档键失效——故 id 与 label 措辞不一致属预期。
 CONSENT_ITEMS = [
     {
         "id": "share_hash_metadata",
@@ -44,7 +47,7 @@ CONSENT_ITEMS = [
     },
     {
         "id": "melody_market_tradable",
-        "label": "理解共享后可在 Melody 市场交易",
+        "label": "理解共享后可在 Zeus 交易平台交易",
         "required": True,
     },
 ]
@@ -84,7 +87,7 @@ class ConsentGate:
             "required_all": True,
             "message": (
                 "确权前需授权共享哈希化经验元数据。原始经验仅存本地，"
-                "平台技术上无法访问原始数据。共享后可在 Melody 市场交易。"
+                "平台技术上无法访问原始数据。共享后可在 Zeus 交易平台交易。"
             ),
         }
 
@@ -179,7 +182,7 @@ FOUR_STAGES = [
     {
         "id": "trade",
         "label": "④ 确权交易(每次·Ethan返回后)",
-        "data_to": "Melody 市场",
+        "data_to": "Zeus 交易平台",
         "default": False,     # 可拒·本地保留
     },
 ]
@@ -192,7 +195,7 @@ class FourStageConsent:
       ① 成本追踪 → Nova (安装时)
       ② 数据清洗 → L2  (安装时·检测旧数据)
       ③ 经验上传 → Ethan (每天·每条单独)
-      ④ 确权交易 → Melody (Ethan返回后)
+      ④ 确权交易 → Zeus (Ethan返回后)
 
     旧的 ConsentGate(单层 3-checkbox) 保留以向后兼容;
     本类提供 v3.1 的四阶段细粒度授权。
