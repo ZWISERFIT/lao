@@ -503,6 +503,187 @@ def _bootstrap_l2_from_extraction():
     return stat
 
 
+# ── 211B(2026-09-07): 业务事实入库 + W2 注入(178号签章合约原文·灰度 melody) ──
+# 依据: 统筹席开工令《第一刀》。铁律: ①只注入已签章条款(每条带 §出处, 无出处不入库)
+#       ②只注入命中项(零命中零改变) ③注入内容有长度上限 ④灰度仅 melody 域生效。
+# 注意: melody 不在 AGENT_KEYS(LAO 未注册该 agent 域), 故灰度判定不走 _extract_agent,
+#       独立读原始头 x-lao-agent → 不改 AGENT_KEYS/不改 provider 路由, 其余9域零影响。
+LAO_BIZ_FACTS = os.environ.get(
+    "LAO_BIZ_FACTS",
+    os.path.join(os.path.expanduser("~"), ".lao", "business-facts", "facts_178.json"))
+BIZ_FACT_LOG = os.path.join(os.path.expanduser("~"), ".lao", "experience-loop",
+                            "data", "biz_fact_events.jsonl")
+_W2_INJECT_AGENTS = tuple(
+    _a.strip().lower()
+    for _a in os.environ.get("LAO_W2_INJECT_AGENTS", "melody").split(",") if _a.strip())
+_W2_INJECT_ENABLED = os.environ.get("LAO_W2_INJECT_ENABLED", "1") == "1"
+_W2_INJECT_MAXLEN = int(os.environ.get("LAO_W2_INJECT_MAXLEN", "900"))
+_W2_INJECT_TOPK = int(os.environ.get("LAO_W2_INJECT_TOPK", "3"))
+_BIZ_FACTS = []
+_BIZ_MARK = "【签章合约事实】"
+_BIZ_NUM_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(个工作日|个自然月|自然月|工作日|天|日|周|节|分钟|元|%|岁)")
+
+
+def _biz_load_facts(path):
+    """读 178 签章事实源。text/cite 任一为空即丢弃(落实"无出处不入库")。"""
+    out = []
+    try:
+        with open(path, "r", encoding="utf-8") as _f:
+            _raw = json.load(_f)
+    except Exception:
+        return out
+    for _it in (_raw.get("facts") or []):
+        if not isinstance(_it, dict):
+            continue
+        _txt = str(_it.get("text") or "").strip()
+        _cite = str(_it.get("cite") or "").strip()
+        if not _txt or not _cite:
+            continue                      # 无出处 → 不入库(硬闸门)
+        _kws = [str(_k).strip() for _k in (_it.get("keywords") or []) if str(_k).strip()]
+        out.append({"id": str(_it.get("id") or ""), "text": _txt, "cite": _cite,
+                    "keywords": _kws, "domain": str(_it.get("domain") or "")})
+    return out
+
+
+_BIZ_PT_CUES = ("私教", "私人教练", "教练", "包月", "课时", "课程", "上课", "约课",
+                "资深班", "基础班", "一对一")
+_BIZ_MB_CUES = ("会籍", "会员卡", "健身卡", "月卡", "季卡", "年卡", "次卡", "开卡",
+                "门禁", "停卡", "转卡", "卡")
+
+
+def _biz_scope(text):
+    """按问题线索定域: 会籍/私教事实互串会诱发假拦截(如问退款却命中私教单节价)。
+    两域线索都有或都无 → 不限域(交由关键词排序)。global 域始终可命中。"""
+    _pt = any(_c in text for _c in _BIZ_PT_CUES)
+    _mb = any(_c in text for _c in _BIZ_MB_CUES)
+    if _pt and not _mb:
+        return "personal_training"
+    if _mb and not _pt:
+        return "membership"
+    return ""
+
+
+def _biz_hits(text, topk):
+    """关键词命中的签章事实(命中数降序)。零命中返回空列表 → 零改变。"""
+    if not text or not _BIZ_FACTS:
+        return []
+    _scope = _biz_scope(text)
+    _scored = []
+    for _f in _BIZ_FACTS:
+        if _scope and _f["domain"] not in (_scope, "global"):
+            continue
+        _n = sum(1 for _k in _f["keywords"] if _k and _k in text)
+        if _n > 0:
+            _scored.append((_n, _f))
+    _scored.sort(key=lambda _x: (-_x[0], _x[1]["id"]))
+    return [_f for _n, _f in _scored[:max(1, int(topk))]]
+
+
+def _biz_inject_block(hits, maxlen):
+    """命中事实 → 注入块(总长度上限截断·防上下文膨胀)。"""
+    if not hits:
+        return ""
+    _head = (_BIZ_MARK + "以下为已签章合约原文条款, 回答须以此为准; "
+             "不得改写条款、不得代客户试算具体金额; 未列入的条款一律转人工。")
+    _lines = [_head]
+    _used = len(_head)
+    for _f in hits:
+        _ln = "· %s(%s)" % (_f["text"], _f["cite"])
+        if _used + len(_ln) + 1 > maxlen:
+            break
+        _lines.append(_ln)
+        _used += len(_ln) + 1
+    if len(_lines) == 1:
+        return ""
+    return "\n".join(_lines)
+
+
+def _biz_event(kind, agent, request_id, fact_ids, detail=""):
+    """211B: 注入/矛盾/一致 事件落盘(可量化·供验收实测计数)。"""
+    try:
+        os.makedirs(os.path.dirname(BIZ_FACT_LOG), exist_ok=True)
+        with open(BIZ_FACT_LOG, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({
+                "ts": _dt.now(_tzone.utc).isoformat(), "kind": kind,
+                "agent": agent or "", "request_id": request_id,
+                "fact_ids": list(fact_ids or []), "detail": str(detail)[:400],
+            }, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _biz_numbers(text):
+    """抽「数值+单位」→ {单位: 数值集合}。用于内容级数值核对(非计数)。"""
+    out = {}
+    try:
+        for _v, _u in _BIZ_NUM_RE.findall(text or ""):
+            if _u == "个工作日":
+                _u = "工作日"
+            elif _u == "个自然月":
+                _u = "自然月"
+            elif _u == "日":
+                _u = "天"
+            if "." in _v:
+                _v = _v.rstrip("0").rstrip(".")
+            out.setdefault(_u, set()).add(_v)
+    except Exception:
+        return {}
+    return out
+
+
+def _biz_contradiction(hits, answer):
+    """真矛盾判定(拒绝假拦截):
+    同一单位下 命中事实的数值全集 与 回答的数值集合 完全无交集 → 判矛盾。
+    该单位在任一侧缺席 → 不判; 有任一交集 → 不判。不做宽判定凑数字。
+    """
+    if not hits or not answer:
+        return []
+    _ans = _biz_numbers(answer)
+    if not _ans:
+        return []
+    # 只用"命中最强的那条事实"所含单位做核对(其余命中项仅用于注入)。
+    # 否则弱命中项会把无关单位(如私教单节价 元)带进来 → 假拦截。
+    _top_units = set(_biz_numbers(hits[0]["text"]).keys())
+    if not _top_units:
+        return []
+    _fact_all = {}
+    for _f in hits:
+        for _u, _vals in _biz_numbers(_f["text"]).items():
+            _fact_all.setdefault(_u, set()).update(_vals)
+    _bad = []
+    for _u in sorted(_top_units):
+        _fvals = _fact_all.get(_u) or set()
+        _avals = _ans.get(_u)
+        if not _fvals or not _avals or (_fvals & _avals):
+            continue
+        _bad.append({"unit": _u, "contract": sorted(_fvals), "answer": sorted(_avals),
+                     "cites": [_f["cite"] for _f in hits if _u in _biz_numbers(_f["text"])]})
+    return _bad
+
+
+def _bootstrap_biz_facts():
+    """211B: 178号签章合约事实 → 内存(仅灰度 agent 域装载·天然隔离其他域)。"""
+    stat = {"loaded": 0, "agents": list(_W2_INJECT_AGENTS), "domains": 0}
+    _BIZ_FACTS.clear()
+    _BIZ_FACTS.extend(_biz_load_facts(LAO_BIZ_FACTS))
+    stat["loaded"] = len(_BIZ_FACTS)
+    if FACTS is not None and _BIZ_FACTS:
+        for _ag in _W2_INJECT_AGENTS:
+            _n = 0
+            for _f in _BIZ_FACTS:
+                try:
+                    FACTS.add_fact(_ag, "%s(%s)" % (_f["text"], _f["cite"]),
+                                   domain="signed_contract", confidence=1.0,
+                                   fact_id="178-%s" % _f["id"])
+                    _n += 1
+                except Exception:
+                    continue
+            if _n:
+                stat["domains"] += 1
+    return stat
+
+
 try:
     _L2_BOOT = _bootstrap_l2_from_extraction()
     logger.info("211 L2接线: 锚点=%s 关键词键=%s 事实=%s (源=%s)",
@@ -511,6 +692,16 @@ try:
 except Exception as _boot_e:
     _L2_BOOT = {"anchors": 0, "keyword_keys": 0, "facts": 0}
     logger.warning("211 L2接线失败(不阻塞路由): %s", _boot_e)
+
+# 211B: 178号签章合约业务事实装载(失败不阻塞路由)
+try:
+    _BIZ_BOOT = _bootstrap_biz_facts()
+    logger.info("211B 业务事实装载: 条数=%s 灰度域=%s 注入=%s 上限=%s (源=%s)",
+                _BIZ_BOOT.get("loaded"), ",".join(_W2_INJECT_AGENTS),
+                _W2_INJECT_ENABLED, _W2_INJECT_MAXLEN, LAO_BIZ_FACTS)
+except Exception as _biz_boot_e:
+    _BIZ_BOOT = {"loaded": 0, "agents": [], "domains": 0}
+    logger.warning("211B 业务事实装载失败(不阻塞路由): %s", _biz_boot_e)
 
 # ── 三层Loop(2026-08-16 创始人令): L2经验工厂→L3确权→反哺L1 命中率/免疫 ──
 # ExperienceLoop 持久化锚点库+反馈总线+确权链, route 结果回流(错误复利),
@@ -1937,6 +2128,37 @@ async def chat_completions(request: Request):
         except Exception:
             pass  # fail-open·不阻塞路由
 
+    # 211B(2026-09-07): W2 业务事实注入·178号签章合约原文
+    # 仅命中项(零命中零改变) + 长度上限 + 灰度仅 x-lao-agent 命中 _W2_INJECT_AGENTS 时生效。
+    _biz_gray = None
+    _biz_hit_facts = []
+    if _BIZ_FACTS:
+        try:
+            _h_agent = (request.headers.get("x-lao-agent") or "").strip().lower()
+            if _h_agent in _W2_INJECT_AGENTS:
+                _biz_gray = _h_agent
+            elif (agent or "").strip().lower() in _W2_INJECT_AGENTS:
+                _biz_gray = (agent or "").strip().lower()
+        except Exception:
+            _biz_gray = None
+    if _biz_gray:
+        try:
+            _biz_q = ""
+            if messages and isinstance(messages[-1], dict):
+                _bq = messages[-1].get("content", "")
+                _biz_q = _bq if isinstance(_bq, str) else str(_bq)
+            _biz_hit_facts = _biz_hits(_biz_q, _W2_INJECT_TOPK)
+            if _biz_hit_facts and _W2_INJECT_ENABLED:
+                _biz_blk = _biz_inject_block(_biz_hit_facts, _W2_INJECT_MAXLEN)
+                if _biz_blk and messages and isinstance(messages[-1], dict):
+                    _bq = messages[-1].get("content", "")
+                    if isinstance(_bq, str) and _BIZ_MARK not in _bq:
+                        messages[-1]["content"] = _bq + "\n\n" + _biz_blk
+                        _biz_event("inject", _biz_gray, request_id,
+                                   [_f["id"] for _f in _biz_hit_facts], _biz_blk[:200])
+        except Exception:
+            pass  # fail-open·不阻塞路由
+
     # v3.5.1-wiring: W2.5 认知模式匹配·影响 W3 经验直答双重确认
     _cognitive_match = None
     if COGNITIVE is not None:
@@ -2340,6 +2562,28 @@ async def chat_completions(request: Request):
                 _validation_failed = False
         except Exception:
             _validation_failed = False  # fail-open
+
+    # 211B(2026-09-07): 签章合约事实矛盾检测(仅灰度域)·数值冲突 → 置验证失败交 W6 重推理
+    # 真拦截口径见 _biz_contradiction: 同一单位下无交集才判, 单位缺席/有交集一律放行。
+    if _biz_hit_facts and _biz_gray:
+        try:
+            _biz_ans = _content
+            if not _biz_ans:
+                try:
+                    _biz_ans = resp.choices[0].message.content or ""
+                except Exception:
+                    _biz_ans = ""
+            _biz_bad = _biz_contradiction(_biz_hit_facts, _biz_ans)
+            if _biz_bad:
+                _validation_failed = True
+                _biz_event("contradiction", _biz_gray, request_id,
+                           [_f["id"] for _f in _biz_hit_facts],
+                           json.dumps(_biz_bad, ensure_ascii=False))
+            else:
+                _biz_event("consistent", _biz_gray, request_id,
+                           [_f["id"] for _f in _biz_hit_facts], "")
+        except Exception:
+            pass  # fail-open
 
     # v3.5.1-wiring: W5 出站验证·RealityCheck+UserFactBase(第二层)
     _reality_state = None
