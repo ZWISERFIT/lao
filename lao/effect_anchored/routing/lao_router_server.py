@@ -519,10 +519,14 @@ _W2_INJECT_AGENTS = tuple(
 _W2_INJECT_ENABLED = os.environ.get("LAO_W2_INJECT_ENABLED", "1") == "1"
 _W2_INJECT_MAXLEN = int(os.environ.get("LAO_W2_INJECT_MAXLEN", "900"))
 _W2_INJECT_TOPK = int(os.environ.get("LAO_W2_INJECT_TOPK", "3"))
+# #41(2026-09-07): 出处照抄闸门开关·回答引用注入白名单外的阿拉伯条款号→判无据引用
+_W2_CITE_GUARD = os.environ.get("LAO_W2_CITE_GUARD", "1") == "1"
 _BIZ_FACTS = []
 _BIZ_MARK = "【签章合约事实】"
 _BIZ_NUM_RE = re.compile(
     r"(\d+(?:\.\d+)?)\s*(个工作日|个自然月|自然月|工作日|天|日|周|节|分钟|元|%|岁)")
+# #41: 抽条款号(§6.5 / §7.1、§7.2 / §九.2 / §三). 阿拉伯号参与闸门, 中文号仅入白名单.
+_BIZ_CITE_RE = re.compile(r"§\s*([0-9]+(?:\.[0-9]+)*|[一二三四五六七八九十百]+(?:\.[0-9]+)*)")
 
 
 def _biz_load_facts(path):
@@ -585,7 +589,9 @@ def _biz_inject_block(hits, maxlen):
     if not hits:
         return ""
     _head = (_BIZ_MARK + "以下为已签章合约原文条款, 回答须以此为准; "
-             "不得改写条款、不得代客户试算具体金额; 未列入的条款一律转人工。")
+             "不得改写条款、不得代客户试算具体金额; 未列入的条款一律转人工。"
+             "引用条款出处时必须原样照抄下方各条所附的出处编号(如§6.5), "
+             "不得自行编造、推断或补写未提供的条款号。")
     _lines = [_head]
     _used = len(_head)
     for _f in hits:
@@ -660,6 +666,41 @@ def _biz_contradiction(hits, answer):
         _bad.append({"unit": _u, "contract": sorted(_fvals), "answer": sorted(_avals),
                      "cites": [_f["cite"] for _f in hits if _u in _biz_numbers(_f["text"])]})
     return _bad
+
+
+def _biz_citations(text):
+    """抽条款号 → (阿拉伯号集合, 中文号集合)。§6.5→'6.5'(阿); §九.2→'九.2'(中)。"""
+    _ar, _ot = set(), set()
+    try:
+        for _m in _BIZ_CITE_RE.findall(text or ""):
+            _s = _m.strip()
+            if not _s:
+                continue
+            (_ar if _s[0].isdigit() else _ot).add(_s)
+    except Exception:
+        return set(), set()
+    return _ar, _ot
+
+
+def _biz_cite_fabricated(hits, answer):
+    """#41 出处照抄闸门(拒假拦截): 回答里出现的【阿拉伯数字条款号】若不在本次注入各条
+    cite 所含条款号白名单内 → 判"无据引用"(模型自编/推断/补写未提供的条款号)。
+    中文章号(§九.2 等)因格式多变仅并入白名单比对, 不主动触发(防误伤)。
+    未注入(hits空)、回答无条款号、或全部命中白名单 → 一律不判(零假拦截)。
+    """
+    if not hits or not answer:
+        return []
+    _ans_ar, _ans_ot = _biz_citations(answer)
+    if not _ans_ar:
+        return []
+    _white_ar = set()
+    for _f in hits:
+        _a, _o = _biz_citations(_f.get("cite", ""))
+        _white_ar |= _a
+    _bad = sorted(_ans_ar - _white_ar)
+    if not _bad:
+        return []
+    return [{"fabricated": _bad, "allowed": sorted(_white_ar)}]
 
 
 def _bootstrap_biz_facts():
@@ -2582,6 +2623,14 @@ async def chat_completions(request: Request):
             else:
                 _biz_event("consistent", _biz_gray, request_id,
                            [_f["id"] for _f in _biz_hit_facts], "")
+            # #41(2026-09-07): 出处照抄闸门·回答引用注入白名单外阿拉伯条款号→无据引用→W6重推理
+            if _W2_CITE_GUARD:
+                _biz_fab = _biz_cite_fabricated(_biz_hit_facts, _biz_ans)
+                if _biz_fab:
+                    _validation_failed = True
+                    _biz_event("cite_unfounded", _biz_gray, request_id,
+                               [_f["id"] for _f in _biz_hit_facts],
+                               json.dumps(_biz_fab, ensure_ascii=False))
         except Exception:
             pass  # fail-open
 
