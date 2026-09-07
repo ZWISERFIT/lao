@@ -27,7 +27,7 @@ lao-router — LAO 成本优化 OpenAI 兼容代理 (方案A·9Agent共用)
     - 成本策略(权重/阈值)= 闭源 Private Policy; 本服务可执行可审计
 """
 from __future__ import annotations
-import asyncio, json, os, time, logging, threading, uuid
+import asyncio, json, os, re, time, logging, threading, uuid
 from datetime import datetime as _dt, timezone as _tzone, timedelta as _tdelta
 from collections import deque
 from typing import Optional, Dict, Any, List
@@ -339,6 +339,178 @@ try:
     FACTS = UserFactBase()
 except Exception as _ft_e:
     FACTS = None
+
+# ── 211(2026-09-07): L2 断线修复·把 experience-loop 萃取产物灌进 W2/W5 两把尺子 ──
+# 根因: ANCHOR_MEMORY/FACTS 实例化即空库(无磁盘加载), 萃取产出的 anchors.json 从未回流,
+#       导致事实校正无事实可比对(既抓不到真幻觉, 又把无证据回答一律打回重推理)。
+# 注意: anchors.json 是 experience-loop 格式 {id:{"current":{...},"hash":...}}, 与 MemoryAnchor
+#       内部格式({"value":...}) 不同, 需归一; 且 W2 按中文关键词 lookup, 故额外建关键词索引。
+LAO_ANCHOR_DB = os.environ.get(
+    "LAO_ANCHOR_DB",
+    os.path.join(os.path.expanduser("~"), ".lao", "experience-loop", "anchors.json"))
+FACT_CHECK_LOG = os.path.join(os.path.expanduser("~"), ".lao", "experience-loop",
+                              "data", "fact_check_events.jsonl")
+_W2_ANCHOR_KEYWORDS = ("创始人", "门店", "预算", "用户", "基础设施")
+FACTS_GLOBAL_USER = "_lao_global"      # 全局萃取事实域(W5 查询时与 agent 域合并)
+_FACT_RELEVANCE_MIN = 2                # 至少命中2个词元才算相关(防单字误配)
+_FACT_STOPTOKENS = set()               # 211b: 过半事实共有的样板词元(启动时算·无辨识度)
+
+
+def _fact_text_of(value):
+    """锚点 value → 可读事实文本。"""
+    if isinstance(value, dict):
+        for _k in ("fact", "text", "content", "summary"):
+            if value.get(_k):
+                return str(value[_k])
+        try:
+            return json.dumps(value, ensure_ascii=False)
+        except Exception:
+            return str(value)
+    return str(value)
+
+
+def _fact_content_of(fact):
+    """UserFactBase.Fact → 文本(兼容 dataclass/dict/str)。"""
+    _c = getattr(fact, "content", None)
+    if _c:
+        return str(_c)
+    if isinstance(fact, dict):
+        return str(fact.get("content") or fact.get("fact") or "")
+    return str(fact or "")
+
+
+def _fact_tokens(text):
+    """文本 → 可比对词元(拉丁词≥4字符 + 中文2-gram)。"""
+    _t = (text or "").lower()
+    toks = set(re.findall(r"[a-z_][a-z0-9_]{3,}", _t))
+    for _seg in re.findall(r"[\u4e00-\u9fff]{2,}", text or ""):
+        for _i in range(len(_seg) - 1):
+            toks.add(_seg[_i:_i + 2])
+    return toks
+
+
+def _fact_is_relevant(fact, probe_text):
+    """事实是否与本次问答相关(相关才算证据·防无关事实冒充证据盖"已核实"章)。"""
+    if not probe_text:
+        return False
+    _c = _fact_content_of(fact)
+    if not _c:
+        return False
+    _ft = _fact_tokens(_c)
+    if not _ft:
+        return False
+    # 211b: 剔除样板词元后再比对(否则 auto-recovered 之类共有词会让任何问题命中全库)
+    _hit = (_ft - _FACT_STOPTOKENS) & _fact_tokens(probe_text)
+    if not _hit:
+        return False
+    # 单个高辨识度技术标识(≥6字符拉丁词, 如 gateway_down/cpu_sustained)即算相关;
+    # 否则需≥2个词元命中(防单字/常用词误配)。
+    for _h in _hit:
+        if len(_h) >= 6 and _h.isascii():
+            return True
+    return len(_hit) >= _FACT_RELEVANCE_MIN
+
+
+def _fact_check_event(verdict, agent, request_id, evidence, confidence, state):
+    """211: 事实校正每次判定落盘(pass / pass_no_facts / blocked)·可观测化。失败不阻塞。"""
+    try:
+        os.makedirs(os.path.dirname(FACT_CHECK_LOG), exist_ok=True)
+        with open(FACT_CHECK_LOG, "a", encoding="utf-8") as _f:
+            _f.write(json.dumps({
+                "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "request_id": request_id, "agent": agent or "unknown",
+                "verdict": verdict, "evidence_count": evidence,
+                "confidence": confidence, "state": state,
+            }, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def _load_extracted_anchors(path):
+    """读 experience-loop 锚点库并归一为 {key: value}。失败→{}(fail-open)。"""
+    try:
+        with open(path, "r", encoding="utf-8") as _f:
+            raw = json.load(_f)
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    if isinstance(raw.get("anchors"), dict):
+        raw = raw["anchors"]
+    out = {}
+    for _k, _v in raw.items():
+        if not isinstance(_v, dict):
+            continue
+        _cur = _v.get("current") if isinstance(_v.get("current"), dict) else None
+        _val = _cur.get("value") if _cur is not None else _v.get("value")
+        if _val is not None:
+            out[_k] = _val
+    return out
+
+
+def _bootstrap_l2_from_extraction():
+    """211: 萃取产物 → W2 MemoryAnchor + W5 UserFactBase。返回装载计数。"""
+    stat = {"anchors": 0, "keyword_keys": 0, "facts": 0}
+    data = _load_extracted_anchors(LAO_ANCHOR_DB)
+    if not data:
+        return stat
+    if ANCHOR_MEMORY is not None:
+        _bucket = {}
+        for _k, _v in data.items():
+            try:
+                ANCHOR_MEMORY.put(_k, _v, source="experience-loop")
+                stat["anchors"] += 1
+            except Exception:
+                continue
+            _txt = _fact_text_of(_v)
+            for _kw in _W2_ANCHOR_KEYWORDS:
+                if _kw in _txt:
+                    _bucket.setdefault(_kw, []).append({"anchor_id": _k, "fact": _txt})
+            if str(_k).startswith("fact-succ-"):   # 运维类已验证策略→"基础设施"域可被W2命中
+                _bucket.setdefault("基础设施", []).append({"anchor_id": _k, "fact": _txt})
+        for _kw, _items in _bucket.items():
+            try:
+                ANCHOR_MEMORY.put(_kw, _items, source="experience-loop:keyword-index")
+                stat["keyword_keys"] += 1
+            except Exception:
+                pass
+    if FACTS is not None:
+        _texts = []
+        for _k, _v in data.items():
+            _txt = _fact_text_of(_v)
+            if not _txt:
+                continue
+            try:
+                FACTS.add_fact(FACTS_GLOBAL_USER, _txt[:500], domain="extracted",
+                               confidence=0.9, fact_id=str(_k))
+                stat["facts"] += 1
+                _texts.append(_txt)
+            except Exception:
+                continue
+        # 211b: 过半事实共有的词元(如 auto-recovered/已验证)无辨识度; 若计入相关性,
+        # 任何问题都会命中全库 → evidence 虚高 → 误给回答盖"已核实"章。启动时算出并剔除。
+        try:
+            _cnt = {}
+            for _t in _texts:
+                for _tok in _fact_tokens(_t):
+                    _cnt[_tok] = _cnt.get(_tok, 0) + 1
+            _thr = max(2, int(len(_texts) * 0.5))
+            _FACT_STOPTOKENS.clear()
+            _FACT_STOPTOKENS.update(_tok for _tok, _c in _cnt.items() if _c >= _thr)
+            stat["stoptokens"] = len(_FACT_STOPTOKENS)
+        except Exception:
+            pass
+    return stat
+
+
+try:
+    _L2_BOOT = _bootstrap_l2_from_extraction()
+    logger.info("211 L2接线: 锚点=%s 关键词键=%s 事实=%s (源=%s)",
+                _L2_BOOT.get("anchors"), _L2_BOOT.get("keyword_keys"),
+                _L2_BOOT.get("facts"), LAO_ANCHOR_DB)
+except Exception as _boot_e:
+    _L2_BOOT = {"anchors": 0, "keyword_keys": 0, "facts": 0}
+    logger.warning("211 L2接线失败(不阻塞路由): %s", _boot_e)
 
 # ── 三层Loop(2026-08-16 创始人令): L2经验工厂→L3确权→反哺L1 命中率/免疫 ──
 # ExperienceLoop 持久化锚点库+反馈总线+确权链, route 结果回流(错误复利),
@@ -2173,21 +2345,43 @@ async def chat_completions(request: Request):
     _reality_state = None
     if REALITY is not None and _validation_failed is False:
         try:
+            # 211(2026-09-07)修复: ①事实取 agent域+全局萃取域 ②只把"与本次问答相关"的事实
+            # 计为证据(防无关事实冒充证据·把回答误盖"已核实"章) ③无相关事实→放行不误伤(仅记录)
             _ev_cnt = 0
             _kw_matches = 0
+            _relevant = []
             if FACTS is not None:
-                _facts = FACTS.query_facts(agent or "unknown")
-                _facts_text = " ".join(str(f) for f in _facts)
-                if _facts_text:
-                    _kw_matches = sum(1 for _w in _facts_text.split() if _w and _w in _content)
-                _ev_cnt = min(len(_facts), 5)
+                _facts = list(FACTS.query_facts(agent or "unknown"))
+                try:
+                    _facts += list(FACTS.query_facts(FACTS_GLOBAL_USER))
+                except Exception:
+                    pass
+                _probe_text = "%s\n%s" % (task_text or "", _content or "")
+                _relevant = [_f for _f in _facts if _fact_is_relevant(_f, _probe_text)]
+                _rel_text = " ".join(_fact_content_of(_f) for _f in _relevant)
+                if _rel_text:
+                    _kw_matches = sum(1 for _w in set(_rel_text.split())
+                                      if len(_w) >= 3 and _w in _content)
+                # 211b: 证据数封顶2 → RealityCheck 永不因"计数"判 verified(≥3才verified)。
+                # 计数不等于核对: 没做过内容核对, 不能替回答盖"已核实"章(最多 partial)。
+                _ev_cnt = min(len(_relevant), 2)
             _rev = REALITY.evaluate(
                 answer_id=request_id, evidence_count=_ev_cnt, trusted_sources=1,
                 unknown_assumptions=0, experience_keys=[], keyword_matches=_kw_matches)
             _reality_state = getattr(_rev, "verification_state", None)
             _conf = float(getattr(_rev, "confidence_score", 0) or 0)
             if _reality_state == "unverified" and _conf < 50:
-                _validation_failed = True  # 无事实支撑 → 标记(重推理 W6)
+                if _relevant:
+                    _validation_failed = True   # 有相关事实仍无支撑 → 真拦截(重推理 W6)
+                    _fact_check_event("blocked", agent, request_id,
+                                      len(_relevant), _conf, _reality_state)
+                else:
+                    # 211: 事实库无相关事实 → 放行不误伤(此前一律打回重推理·双倍烧token)
+                    _fact_check_event("pass_no_facts", agent, request_id,
+                                      0, _conf, _reality_state)
+            else:
+                _fact_check_event("pass", agent, request_id,
+                                  len(_relevant), _conf, _reality_state)
         except Exception:
             pass  # fail-open
 
