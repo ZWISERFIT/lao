@@ -240,6 +240,15 @@ AGENT_KEYS = {
     "shuyu": _read_secret("OC_DEEPSEEK_SHUYU_API_KEY"),
     "stella": _read_secret("OC_DEEPSEEK_STELLA_API_KEY"),
     "zeus": _read_secret("OC_DEEPSEEK_ZEUS_API_KEY"),
+    # 217号件 #40: Momo 大脑上的 Runtime 分身 — 复用 Momo 的 key, 保证 DeepSeek 后台按 momo 正确归因
+    "melody": _read_secret("OC_DEEPSEEK_MOMO_API_KEY"),
+    "saros": _read_secret("OC_DEEPSEEK_MOMO_API_KEY"),
+}
+
+# 217号件 #40: Runtime 分身元数据(端口/上游/域) — 与 AGENT_KEYS(key字符串)分离, 不污染归因/反查逻辑
+RUNTIME_AGENTS = {
+    "melody": {"runtime": "melody-runtime", "port": 8770, "scope": "member-operations", "parent": "momo"},
+    "saros": {"runtime": "saros-runtime", "port": 8771, "scope": "store-operations", "parent": "momo"},
 }
 
 def _extract_agent(model_hint: str, headers: Dict) -> str:
