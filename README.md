@@ -1,78 +1,50 @@
-# LAO — Lineage Anchored Ontology
+# LAO — Agent Experience Infrastructure
 
-> 物理域后训练先行者 · 核心框架 / Physical Domain Post-Training Pioneer · Core Framework
-
----
-
-## 定位 / Positioning
-
-LAO 是 ZWISERFIT 的核心后训练框架，坐在 LLM 与 Runtime 之间，为每个任务选对模型、砍掉浪费的 token、把回答锚定在你的经验上。
-
-LAO is ZWISERFIT's core post-training framework, sitting between your LLM and Runtime — picking the right model, cutting wasted tokens, and anchoring answers to your experience.
-
-## 叙事线 / Narrative
-
-```
-LLM → LAO → Runtime → 物理域 → Web 5.0 生态
-```
+> Your Agent gets smarter with every operation. Not because the model improved — because Experience accumulated.
 
 ---
 
-# LAO — Lineage Anchored Ontology
+## What is LAO?
 
-**Official site · 官网门店：** [zwiserfit.cn](https://zwiserfit.cn)
-LAO sits between your LLM and Runtime and stops burning your tokens. Free, open source (Apache 2.0), no telemetry.
-LAO坐在你的LLM与Runtime之间，帮你省token。免费、开源（Apache 2.0）、无遥测。
+LAO is infrastructure that turns Agent operations into reusable **Experience**. It sits between your LLM and your Runtime — open source, Apache 2.0, zero telemetry.
+
+Every operation leaves behind structured, traceable history. Successes get cached. Failures become permanent constraints. Over time, your Agent becomes measurably more reliable.
+
+→ **Understand Experience:** [zwiserfit.cn/v2/experience](https://zwiserfit.cn/v2/experience/)
+→ **See the evidence:** [zwiserfit.cn/v2/evidence](https://zwiserfit.cn/v2/evidence/)
 
 ---
 
-## Who watches the LLM and Runtime, so they stop burning your tokens?
+## This is not a demo.
 
-You need a trusted, independent third party — aligned with your interests, protecting them. That's LAO: sitting between your LLM and your Runtime, it picks the right model for every task, cuts wasted tokens, and anchors answers to your experience. Open source. Free. Only on your side.
+LAO is built from 7 years of running a real fitness gym in Dongguan, China. Every feature exists because a real operation hit a real problem:
 
-你需要一个可信的独立第三方——和你的利益站在一起，替你守住它们。LAO就坐在LLM与Runtime之间：为每个任务选对模型、砍掉浪费的token、把回答锚定在你的经验上。开源、免费，只站在你这一边。
+- **Token waste** — cache-miss requests are 8.5% of volume but 56% of cost. We measured it. [See the evidence →](https://zwiserfit.cn/v2/evidence/)
+- **Memory loss** — every session starts from zero. Experience fixes that.
+- **Hallucination** — intent lock + experience anchoring. LAO optimizes how, never what you meant.
 
-## Why this matters · 为什么这很重要
+We don't show slideshows. We show receipts.
 
-LAO doesn't just save tokens — it creates a new asset class called **Experience**.
+---
 
-Every operation you run leaves behind structured, traceable operational history. Successes get cached. Failures become permanent constraints. Over time, your Agent becomes measurably more reliable — not because the model got smarter, but because Experience accumulated.
+## Verify everything yourself.
 
-**This repo is the infrastructure. The website explains why it exists.**
+- **Code:** Apache 2.0. Read it, fork it, audit it. `pip install git+https://github.com/ZWISERFIT/lao.git`
+- **Data:** every claim links to a source. No source = no claim.
+- **Protocol:** the [Experience Protocol](https://zwiserfit.cn/v2/experience-protocol/) is a frozen specification — you can reproduce any Experience record.
 
-→ Understand Experience: [zwiserfit.cn/v2/experience](https://zwiserfit.cn/v2/experience/)
-→ See the evidence chain: [zwiserfit.cn/v2/evidence](https://zwiserfit.cn/v2/evidence/)
-→ Read the Experience Protocol: [zwiserfit.cn/v2/experience-protocol](https://zwiserfit.cn/v2/experience-protocol/)
+---
 
-LAO 不只帮你省 token——它创造一种新的资产类别：**Experience（经验）**。
+## Co-build with us.
 
-你的每一次操作都会留下结构化、可追溯的运行历史。成功被缓存，失败变成永久约束。随着时间推移，你的 Agent 会变得更可靠——不是因为模型变聪明了，而是因为 Experience 在积累。
+This isn't just our infrastructure — it's yours too.
 
-**这个仓库是基础设施。官网解释它为什么存在。**
+- **First contribution:** see [CONTRIBUTING.md](./CONTRIBUTING.md) for easy-first-issues
+- **Trust builders:** every Issue, PR, and discussion is recorded in [TRUST-BUILDERS.md](./TRUST-BUILDERS.md)
+- **Narrative:** read [Why this matters](#why-this-matters) below
 
-→ 理解 Experience：[zwiserfit.cn/v2/experience](https://zwiserfit.cn/v2/experience/)
-→ 查看证据链：[zwiserfit.cn/v2/evidence](https://zwiserfit.cn/v2/evidence/)
-→ 阅读 Experience Protocol：[zwiserfit.cn/v2/experience-protocol](https://zwiserfit.cn/v2/experience-protocol/)
-
-
-
-### What LAO does for you · LAO为你做三件事
-
-**1. Save money · 省钱**
-Two layers: a pre-routing heuristic prediction, then post-hoc reconciliation against official `amount`/`cost` CSV. LAO has no provider telemetry.
-两层口径：路由前按任务与模型目录作启发式预判；事后以官方 `amount`/`cost` CSV 真实计量对账。LAO 不读取 provider 真实遥测。
-（实测数字以官方对账为准，对账完成前此处不引数。Measured figures pending official reconciliation. Any causal saving claim is pending reconciliation.）
-
-**2. Memory · 记忆**
-Experience settles in as you work — mistakes become permanent constraints, context is pruned to what matters.
-工作经验实时沉淀：错误变成永久约束，上下文只留关键锚点。
-
-**3. Never bluff · 不乱说话**
-Two layers of certainty:
-- **Intent lock** — LAO may optimize how an answer is delivered, never what you meant.
-- **Experience anchoring** — answers are calibrated against your verified experience; calibration fails → honest fallback to the raw LLM answer. No hard sell, no fabrication.
-
-两层确定性：意图锁定（只优化表达方式，不改你的意思）＋经验锚定（拿你的已验证经验校准回答；校准失败就诚实回退LLM原答，绝不硬编）。
+→ **View the website:** [zwiserfit.cn](https://zwiserfit.cn)
+→ **Read the technical brief:** [zwiserfit.cn/v2/for-agents](https://zwiserfit.cn/v2/for-agents/)
 
 ---
 
