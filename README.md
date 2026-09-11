@@ -32,6 +32,30 @@ You need a trusted, independent third party — aligned with your interests, pro
 
 你需要一个可信的独立第三方——和你的利益站在一起，替你守住它们。LAO就坐在LLM与Runtime之间：为每个任务选对模型、砍掉浪费的token、把回答锚定在你的经验上。开源、免费，只站在你这一边。
 
+## Why this matters · 为什么这很重要
+
+LAO doesn't just save tokens — it creates a new asset class called **Experience**.
+
+Every operation you run leaves behind structured, traceable operational history. Successes get cached. Failures become permanent constraints. Over time, your Agent becomes measurably more reliable — not because the model got smarter, but because Experience accumulated.
+
+**This repo is the infrastructure. The website explains why it exists.**
+
+→ Understand Experience: [zwiserfit.cn/v2/experience](https://zwiserfit.cn/v2/experience/)
+→ See the evidence chain: [zwiserfit.cn/v2/evidence](https://zwiserfit.cn/v2/evidence/)
+→ Read the Experience Protocol: [zwiserfit.cn/v2/experience-protocol](https://zwiserfit.cn/v2/experience-protocol/)
+
+LAO 不只帮你省 token——它创造一种新的资产类别：**Experience（经验）**。
+
+你的每一次操作都会留下结构化、可追溯的运行历史。成功被缓存，失败变成永久约束。随着时间推移，你的 Agent 会变得更可靠——不是因为模型变聪明了，而是因为 Experience 在积累。
+
+**这个仓库是基础设施。官网解释它为什么存在。**
+
+→ 理解 Experience：[zwiserfit.cn/v2/experience](https://zwiserfit.cn/v2/experience/)
+→ 查看证据链：[zwiserfit.cn/v2/evidence](https://zwiserfit.cn/v2/evidence/)
+→ 阅读 Experience Protocol：[zwiserfit.cn/v2/experience-protocol](https://zwiserfit.cn/v2/experience-protocol/)
+
+
+
 ### What LAO does for you · LAO为你做三件事
 
 **1. Save money · 省钱**
